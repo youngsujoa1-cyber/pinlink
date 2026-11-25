@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="onboarding_language_title">Elige tu idioma</string>
+    <string name="onboarding_language_sub">PinLink usará este idioma. Puedes cambiarlo cuando quieras.</string>
+    <string name="onboarding_start">Empezar</string>
+    <string name="onboarding_language_note">Tu ubicación solo se muestra a los miembros de la sala a la que te unes.</string>
+    <string name="language_system">Seguir el idioma del dispositivo</string>
+
+    <string name="tab_map">Mapa</string>
+    <string name="tab_room">Sala</string>
+    <string name="tab_settings">Ajustes</string>
+
+    <string name="lobby_badge">GLOBAL · UBICACIÓN EN VIVO</string>
+    <string name="lobby_hero_title">Todos en una sala, en un mapa</string>
+    <string name="lobby_hero_sub">Crea una sala, envía el código de 6 caracteres y cada miembro verá dónde están los demás: una hora o todo el día.</string>
+    <string name="btn_create_room">Crear una sala</string>
+    <string name="btn_join_room">Unirme con un código</string>
+    <string name="lobby_tip_title">Cómo funciona</string>
+    <string name="lobby_tip_1">Pon un apodo y un color de avatar</string>
+    <string name="lobby_tip_2">Envía el código de 6 caracteres a tus amigos</string>
+    <string name="lobby_tip_3">Elige cuánto compartir y pausa cuando quieras</string>
+    <string name="lobby_always_note">Tu ubicación nunca es pública. Solo la ven los miembros con el código de la sala.</string>
+
+    <string name="create_title">Crear una sala</string>
+    <string name="create_sub">Tus amigos te ven con este nombre y color</string>
+    <string name="field_nickname">Apodo</string>
+    <string name="field_nickname_hint">Cómo te ven tus amigos</string>
+    <string name="label_avatar_color">Color del avatar</string>
+    <string name="btn_create_now">Crear sala</string>
+    <string name="err_nickname_required">Escribe un apodo</string>
+
+    <string name="join_title">Unirme a una sala</string>
+    <string name="join_sub">Introduce el código de 6 caracteres que te envió un amigo</string>
+    <string name="field_code">Código de sala</string>
+    <string name="field_code_hint">ABC123</string>
+    <string name="btn_join_now">Unirme</string>
+    <string name="err_code_needed">El código tiene 6 letras o números</string>
+    <string name="err_room_not_found">No se encontró esa sala. Revisa el código.</string>
+    <string name="join_demo_note">Modo demo: la sala se abre con dos amigos simulados para que pruebes el mapa.</string>
+
+    <string name="room_code_title">Código de sala</string>
+    <string name="room_code_sub">Cualquiera con este código puede entrar</string>
+    <string name="btn_copy">Copiar</string>
+    <string name="btn_share">Compartir</string>
+    <string name="code_copied">Código copiado</string>
+    <string name="invite_message">Únete a mí en PinLink y mira mi ubicación en vivo. Código de sala: %1$s</string>
+    <string name="share_chooser_title">Compartir código de sala</string>
+    <string name="members_title">En esta sala</string>
+    <string name="members_count">%1$d miembro(s) compartiendo</string>
+    <string name="member_you">Tú</string>
+    <string name="member_battery">Batería %1$d%%</string>
+    <string name="state_moving">En movimiento</string>
+    <string name="state_stopped">Detenido</string>
+    <string name="last_update_now">ahora mismo</string>
+    <string name="last_update_min">hace %1$d min</string>
+    <string name="last_update_hours">hace %1$d h</string>
+    <string name="last_update_stale">sin actualizar</string>
+    <string name="sharing_live">Compartiendo</string>
+    <string name="sharing_paused">Oculto</string>
+    <string name="section_share_mode">Ubicación compartida</string>
+    <string name="share_always">Siempre</string>
+    <string name="share_always_desc">Sigue compartiendo con la app cerrada</string>
+    <string name="share_1h">1 hora</string>
+    <string name="share_3h">3 horas</string>
+    <string name="share_8h">8 horas</string>
+    <string name="share_24h">24 horas</string>
+    <string name="share_paused">Ocultar mi ubicación</string>
+    <string name="share_paused_desc">Tus amigos ven tu pin como pausado</string>
+    <string name="share_expires">Termina en %1$s</string>
+    <string name="share_no_expiry">Sin límite de tiempo</string>
+    <string name="share_expired">La ubicación dejó de compartirse: actívala de nuevo</string>
+    <string name="section_meeting">Punto de encuentro</string>
+    <string name="meeting_none">Aún no hay punto de encuentro</string>
+    <string name="meeting_set_by">Marcado por %1$s</string>
+    <string name="btn_pick_meeting">Elegir en el mapa</string>
+    <string name="btn_clear_meeting">Quitar</string>
+    <string name="btn_leave_room">Salir de la sala</string>
+    <string name="leave_room_title">¿Salir de esta sala?</string>
+    <string name="leave_room_body">Tu pin se quita de la sala de inmediato. Después, los miembros no podrán ver tu ubicación.</string>
+    <string name="leave">Salir</string>
+    <string name="cancel">Cancelar</string>
+    <string name="save">Guardar</string>
+    <string name="room_empty">Comparte el código para invitar a tus amigos.</string>
+
+    <string name="map_style_toggle">Estilo del mapa</string>
+    <string name="map_recenter">Mi ubicación</string>
+    <string name="btn_meeting_pin">Punto de encuentro</string>
+    <string name="pick_mode_title">Mueve el mapa hasta el lugar de encuentro</string>
+    <string name="pick_mode_action">Marcar aquí</string>
+    <string name="meeting_name_title">Nombre del punto de encuentro</string>
+    <string name="meeting_name_hint">p. ej. Salida 10 de Gangnam</string>
+    <string name="meeting_name_default">Punto de encuentro</string>
+    <string name="map_demo_banner">Vista demo: los amigos son simulados. Añade una clave de Firebase para sincronizar salas reales.</string>
+    <string name="map_no_fix">Buscando tu ubicación…</string>
+    <string name="map_local_only">La ubicación en segundo plano está desactivada: se comparte solo con la app abierta.</string>
+    <string name="status_sharing">Compartiendo</string>
+    <string name="status_hidden">Oculto</string>
+    <string name="toast_meeting_set">Punto de encuentro compartido con la sala</string>
+    <string name="toast_meeting_cleared">Punto de encuentro eliminado</string>
+    <string name="toast_location_denied">Permite la ubicación para compartir dónde estás.</string>
+    <string name="toast_background_denied">La ubicación en segundo plano está desactivada: se comparte solo con la app abierta.</string>
+    <string name="toast_sharing_started">Compartiendo tu ubicación</string>
+    <string name="toast_joined">Te has unido a la sala</string>
+
+    <string name="settings_title">Ajustes</string>
+    <string name="settings_profile">Perfil</string>
+    <string name="settings_language">Idioma de la app</string>
+    <string name="settings_privacy">Política de privacidad</string>
+    <string name="settings_location">Permiso de ubicación</string>
+    <string name="settings_location_allowed">Permitido siempre</string>
+    <string name="settings_location_foreground">Solo con la app abierta</string>
+    <string name="settings_location_denied">No permitido</string>
+    <string name="settings_open_system">Abrir ajustes del sistema</string>
+    <string name="settings_ads">Anuncios</string>
+    <string name="settings_ads_note">PinLink muestra un banner al final de la pantalla y un anuncio a pantalla completa al abrir una sala. Esta versión usa unidades de anuncio de prueba.</string>
+    <string name="settings_about">Acerca de</string>
+    <string name="settings_version">Versión %1$s</string>
+    <string name="settings_sync_live">Sincronización: servidor conectado</string>
+    <string name="settings_sync_demo">Sincronización: modo demo (sin clave de servidor)</string>
+    <string name="about_body">PinLink mantiene tu ubicación dentro de la sala a la que te unes. Las coordenadas se envían solo mientras compartes, y el pin desaparece al salir o cuando termina el tiempo elegido.</string>
+    <string name="settings_edit_profile">Editar perfil</string>
+
+    <string name="disclosure_title">Antes de empezar a compartir</string>
+    <string name="disclosure_body">PinLink recoge tu ubicación —también cuando la app está cerrada o en segundo plano— para mostrarla a los miembros de la sala a la que te uniste. La compartición se detiene cuando termina el tiempo elegido, cuando pulsas «Ocultar mi ubicación» o cuando sales de la sala. Tus coordenadas se envían al servidor de la sala y permanecen solo mientras la sala está activa.</string>
+    <string name="disclosure_accept">Entendido, continuar</string>
+    <string name="disclosure_decline">Ahora no</string>
+    <string name="bg_disclosure_title">¿Permitir la ubicación siempre?</string>
+    <string name="bg_disclosure_body">Para seguir compartiendo después de cerrar PinLink, elige «Permitir siempre» en ubicación. Si eliges «Solo con la app abierta», la compartición se detiene al salir de la app.</string>
+    <string name="bg_disclosure_open">Abrir ajustes</string>
+    <string name="bg_disclosure_later">Más tarde</string>
+
+    <string name="notif_channel_name">Ubicación compartida</string>
+    <string name="notif_channel_desc">Muestra una notificación mientras compartes tu ubicación con una sala.</string>
+    <string name="notif_title">Compartiendo tu ubicación</string>
+    <string name="notif_text_room">Sala %1$s</string>
+    <string name="notif_text_expiry">Sala %1$s · termina en %2$s</string>
+    <string name="notif_text_paused">Sala %1$s · en pausa</string>
+    <string name="notif_stop">Detener</string>
+
+    <string name="err_network">No se pudo conectar al servidor. Revisa tu conexión.</string>
+    <string name="err_create_failed">No se pudo crear la sala. Inténtalo de nuevo.</string>
+    <string name="err_join_failed">No se pudo entrar en la sala. Inténtalo de nuevo.</string>
+    <string name="startup_error_title">Algo falló al abrir la pantalla. Pulsa Reintentar.</string>
+    <string name="startup_error_retry">Reintentar</string>
+    <string name="last_crash_title">La app se cerró inesperadamente la última vez</string>
+    <string name="last_crash_sub">Haz una captura de esto y envíala: la causa está en el texto de abajo.</string>
+    <string name="last_crash_copy">Copiar</string>
+    <string name="crash_copied">Copiado</string>
+    <string name="close">Cerrar</string>
+</resources>

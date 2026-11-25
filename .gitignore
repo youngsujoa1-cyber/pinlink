@@ -1,0 +1,32 @@
+# ── 비밀값 · 기기 설정 (절대 올리지 않음) ─────────────────────────────
+local.properties
+*.keystore
+*.jks
+*.p12
+keystore.properties
+
+# ── Android / Gradle 빌드 산출물 ────────────────────────────────────
+build/
+/app/build
+/.gradle
+.gradle/
+/.kotlin
+.kotlin/
+/captures
+.externalNativeBuild
+.cxx
+*.iml
+/.idea
+.idea/
+.DS_Store
+
+# ── APK · 번들 ──────────────────────────────────────────────────────
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# ── 도구 산출물 · 작업 폴더 ─────────────────────────────────────────
+work/
+tools/logic-check/out/
+tools/ui-smoke/build/

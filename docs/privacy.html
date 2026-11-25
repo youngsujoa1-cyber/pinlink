@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>개인정보처리방침 · Privacy Policy — PinLink</title>
+<meta name="description" content="PinLink(개발자 Topster)의 개인정보처리방침 / Privacy Policy for PinLink by Topster.">
+<meta name="theme-color" content="#060B12">
+<style>
+  :root{
+    --bg:#F4F7FB; --card:#FFFFFF; --text:#101A24; --muted:#5A6A7B;
+    --line:#DCE5EF; --accent:#0E8A6A; --accent-soft:#E2F7EF; --warn:#B25E00;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#060B12; --card:#0B1420; --text:#EAF0FA; --muted:#93A4BE;
+      --line:#22314A; --accent:#2BD9A6; --accent-soft:#0E3A31; --warn:#FFB020;
+    }
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",Roboto,sans-serif;
+    line-height:1.78; font-size:16px;
+  }
+  .wrap{max-width:780px; margin:0 auto; padding:22px 18px 60px}
+  .brand{display:flex; align-items:center; gap:12px; margin:6px 0 4px}
+  .mark{
+    width:40px; height:40px; border-radius:12px; flex:0 0 auto;
+    background:radial-gradient(circle at 35% 30%, #2BD9A6, #0A5B49 62%, #06131A);
+    box-shadow:0 4px 14px rgba(43,217,166,.28);
+  }
+  h1{font-size:22px; margin:14px 0 4px; letter-spacing:-.01em}
+  .sub{color:var(--muted); font-size:13.5px; margin:0 0 6px}
+  .lang{display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; background:var(--card); margin:14px 0 6px}
+  .lang button{
+    appearance:none; border:0; background:transparent; color:var(--muted);
+    font:inherit; font-size:14px; padding:7px 16px; cursor:pointer;
+  }
+  .lang button[aria-pressed="true"]{background:var(--accent-soft); color:var(--accent); font-weight:700}
+  h2{font-size:16.5px; margin:26px 0 8px; padding-top:6px}
+  p{margin:8px 0}
+  ul{margin:8px 0 8px 2px; padding-left:20px}
+  li{margin:5px 0}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:6px 18px 14px; margin:14px 0}
+  .note{border-left:3px solid var(--accent); background:var(--accent-soft); border-radius:10px; padding:10px 14px; margin:14px 0; font-size:14.5px}
+  a{color:var(--accent)}
+  footer{margin-top:34px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:13px}
+  [hidden]{display:none !important}
+  code{background:var(--accent-soft); border-radius:6px; padding:1px 6px; font-size:13.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <div class="mark" aria-hidden="true"></div>
+    <div>
+      <strong>PinLink</strong>
+      <div class="sub">Topster · 실시간 위치 공유 · Real-time location sharing</div>
+    </div>
+  </div>
+
+  <div class="lang" role="group" aria-label="Language">
+    <button id="btn-ko" aria-pressed="true" onclick="show('ko')">한국어</button>
+    <button id="btn-en" aria-pressed="false" onclick="show('en')">English</button>
+  </div>
+
+  <!-- ===================================================== 한국어 -->
+  <section id="ko">
+    <h1>개인정보처리방침</h1>
+    <p class="sub">시행일 2026년 11월 26일 · 버전 1.0.0</p>
+
+    <div class="note">
+      PinLink는 <b>동의한 방의 멤버에게만</b> 내 위치를 보여 줍니다. 공개 지도나 검색으로는 누구도 내 위치를 볼 수 없습니다.
+      위치 공유는 고른 시간이 끝나거나 <b>일시정지·방 나가기</b>를 누르면 즉시 멈춥니다.
+    </div>
+
+    <h2>1. 개요</h2>
+    <p>
+      PinLink(이하 "앱")는 친구·가족·동료가 6자리 방 코드로 같은 방에 들어와 서로의 실시간 위치를 한 지도에서 보는 앱입니다.
+      개발자 Topster(이하 "개발자")는 앱을 제공하기 위해 필요한 최소한의 정보만 처리하며, 계정 가입이나 비밀번호는 받지 않습니다.
+    </p>
+
+    <h2>2. 수집하는 정보</h2>
+    <ul>
+      <li><b>위치 정보</b> — 위도, 경도, 정확도, 속도(이동 중/정지 판정에 사용). 앱을 열어 둔 동안, 그리고 공유가 켜져 있는 동안 수집합니다.</li>
+      <li><b>내가 정한 프로필</b> — 닉네임과 아바타 색상. 친구에게 보이기 위한 값이며 실명일 필요가 없습니다.</li>
+      <li><b>기기 식별자</b> — 앱이 처음 실행될 때 무작위로 만든 값(24자). 방 안에서 나를 구분하기 위해서만 쓰이고, 앱을 지우면 새로 생깁니다. 안드로이드 광고 ID나 전화번호를 읽지 않습니다.</li>
+      <li><b>배터리 잔량·이동 상태</b> — 친구가 내 핀 옆에서 배터리 %와 이동 중/정지를 볼 수 있게 표시합니다.</li>
+      <li><b>방 정보</b> — 6자리 방 코드, 방을 만든 사람, 방을 만든 시각, 약속 장소(직접 찍은 경우 그 좌표와 이름).</li>
+      <li><b>광고 관련 정보</b> — 아래 7항의 Google AdMob이 처리하는 광고 ID·기기 정보. 개발자는 이를 직접 보관하지 않습니다.</li>
+    </ul>
+    <p>연락처, 사진, 파일, 마이크, 카메라에는 접근하지 않습니다.</p>
+
+    <h2>3. 백그라운드 위치</h2>
+    <p>
+      PinLink는 앱이 화면에 없거나 닫혀 있을 때도 위치를 공유할 수 있습니다. 이를 위해
+      <code>ACCESS_BACKGROUND_LOCATION</code> 권한과 위치 유형의 포그라운드 서비스를 사용합니다.
+    </p>
+    <ul>
+      <li>백그라운드 위치 권한을 요청하기 전에 앱 안에서 <b>명시적 안내 화면</b>을 먼저 보여 주고, 동의한 경우에만 시스템 권한 창을 띄웁니다.</li>
+      <li>공유 중에는 알림 표시줄에 "위치 공유 중" 알림이 항상 떠 있으며, 알림의 <b>중지</b> 버튼으로 즉시 멈출 수 있습니다.</li>
+      <li>백그라운드 위치를 허용하지 않아도 앱을 열어 둔 동안의 공유는 그대로 동작합니다.</li>
+      <li>1·3·8·24시간처럼 시간을 정해 공유하면 그 시간이 끝나는 순간 서비스가 스스로 멈춥니다.</li>
+    </ul>
+
+    <h2>4. 이용 목적</h2>
+    <ul>
+      <li>같은 방의 멤버 지도에 내 핀을 표시하고, 마지막 갱신 시각·배터리·이동 상태를 보여 주기 위해</li>
+      <li>약속 장소를 방 멤버에게 함께 보여 주기 위해</li>
+      <li>광고를 표시해 앱을 무료로 유지하기 위해(Google AdMob)</li>
+    </ul>
+    <p>위 목적 외로 정보를 사용하지 않으며, 광고주에게 위치를 판매하거나 넘기지 않습니다.</p>
+
+    <h2>5. 누가 볼 수 있는가</h2>
+    <ul>
+      <li><b>같은 방의 멤버만</b> 내 위치를 볼 수 있습니다. 방 코드를 아는 사람은 누구나 참여할 수 있으므로, 코드는 믿는 사람에게만 알려 주십시오.</li>
+      <li>공개 지도, 검색, 프로필 목록에는 위치가 노출되지 않습니다.</li>
+      <li>일시정지 중에는 친구 화면에서 내 핀이 "숨김"으로 표시되고 좌표는 갱신되지 않습니다.</li>
+    </ul>
+
+    <h2>6. 보관과 삭제</h2>
+    <ul>
+      <li>위치 좌표는 방이 살아 있는 동안만 서버(Google Cloud Firestore)에 남고, 새 위치를 올릴 때마다 덮어써 집니다.</li>
+      <li><b>방 나가기</b>를 누르면 내 멤버 문서가 서버에서 삭제되어, 이후 누구도 내 위치를 볼 수 없습니다.</li>
+      <li>시간 제한 공유가 끝나거나 일시정지하면 위치 갱신이 멈추고 핀이 숨김으로 바뀝니다.</li>
+      <li>방 데이터(코드·약속 장소)는 방이 사용되지 않으면 개발자가 주기적으로 정리합니다. 삭제를 원하시면 아래 12항으로 방 코드와 함께 알려 주십시오.</li>
+      <li>앱을 지우면 기기 안의 설정·프로필·방 참여 정보가 모두 사라집니다.</li>
+    </ul>
+
+    <h2>7. 제3자 서비스</h2>
+    <ul>
+      <li><b>Google Firebase (Cloud Firestore)</b> — 방과 위치 문서를 저장·조회합니다. Google LLC의 개인정보처리방침이 적용됩니다.</li>
+      <li><b>Google AdMob</b> — 배너·전면 광고를 표시합니다. 광고 ID 등 기기 정보를 처리할 수 있으며, 이용자는 안드로이드 설정에서 광고 ID를 재설정하거나 맞춤 광고를 끌 수 있습니다.</li>
+      <li><b>OpenStreetMap / CARTO</b> — 지도 타일 이미지를 받아 옵니다. 이때 타일 서버는 접속 IP를 알게 됩니다.</li>
+    </ul>
+
+    <h2>8. 광고</h2>
+    <p>
+      앱은 화면 최하단에 배너 광고를, 방을 만들거나 들어간 직후에 전면 광고를 표시할 수 있습니다.
+      현재 버전은 Google이 제공하는 <b>테스트 광고 단위</b>를 사용합니다. 정식 출시 시 실제 광고 단위로 교체되며,
+      광고는 위치 정보를 광고 타기팅에 사용하지 않습니다.
+    </p>
+
+    <h2>9. 아동</h2>
+    <p>PinLink는 만 14세 미만 아동을 대상으로 하지 않으며, 아동의 위치 정보를 의도적으로 수집하지 않습니다.</p>
+
+    <h2>10. 권한 목록</h2>
+    <ul>
+      <li><code>ACCESS_FINE_LOCATION</code>, <code>ACCESS_COARSE_LOCATION</code> — 내 위치 표시·공유</li>
+      <li><code>ACCESS_BACKGROUND_LOCATION</code> — 앱이 닫혀 있을 때의 공유(선택)</li>
+      <li><code>FOREGROUND_SERVICE</code>, <code>FOREGROUND_SERVICE_LOCATION</code> — 공유 중임을 알리는 서비스</li>
+      <li><code>POST_NOTIFICATIONS</code> — 공유 중 알림 표시</li>
+      <li><code>INTERNET</code>, <code>ACCESS_NETWORK_STATE</code> — 지도·방 동기화·광고</li>
+    </ul>
+
+    <h2>11. 이용자의 선택</h2>
+    <ul>
+      <li>위치 공유를 언제든 일시정지하거나 방에서 나갈 수 있습니다.</li>
+      <li>안드로이드 설정 → 애플리케이션 → PinLink → 권한에서 위치 권한을 언제든 회수할 수 있습니다.</li>
+      <li>앱 안 <b>설정 → 개인정보 처리방침</b>에서 이 문서를 다시 볼 수 있습니다.</li>
+    </ul>
+
+    <h2>12. 문의</h2>
+    <p>개인정보 처리에 관한 문의·삭제 요청은 아래로 연락해 주십시오.</p>
+    <ul>
+      <li>개발자: Topster</li>
+      <li>이메일: <a href="mailto:youngsujoa1@gmail.com">youngsujoa1@gmail.com</a></li>
+    </ul>
+    <p class="sub">이 방침이 바뀌면 앱 업데이트와 함께 이 페이지에 반영합니다.</p>
+  </section>
+
+  <!-- ===================================================== English -->
+  <section id="en" hidden>
+    <h1>Privacy Policy</h1>
+    <p class="sub">Effective 26 November 2026 · Version 1.0.0</p>
+
+    <div class="note">
+      PinLink shows your location <b>only to the members of the room you joined</b>. No public map or search can find you.
+      Sharing stops the moment your chosen time runs out, or when you tap <b>Hide my location</b> or <b>Leave room</b>.
+    </div>
+
+    <h2>1. Overview</h2>
+    <p>
+      PinLink (the "app") lets friends, family and colleagues join one room with a 6-character code and see each other's
+      live location on a single map. The developer, Topster ("we"), processes only the information needed to run the app.
+      There is no account and no password.
+    </p>
+
+    <h2>2. Information we collect</h2>
+    <ul>
+      <li><b>Location</b> — latitude, longitude, accuracy and speed (used to show "moving" or "stopped"). Collected while the app is open and while sharing is on.</li>
+      <li><b>The profile you choose</b> — a nickname and an avatar color. A real name is not required.</li>
+      <li><b>Device identifier</b> — a random 24-character value created on first launch. It only distinguishes you inside a room, and changes if you reinstall the app. We do not read your advertising ID or phone number for this.</li>
+      <li><b>Battery level and movement state</b> — shown next to your pin so friends can see your battery % and whether you are moving.</li>
+      <li><b>Room information</b> — the 6-character code, who created the room, when it was created, and the meeting point (coordinates and name) if someone pinned one.</li>
+      <li><b>Advertising data</b> — processed by Google AdMob (section 7). We do not store it ourselves.</li>
+    </ul>
+    <p>We never access your contacts, photos, files, microphone or camera.</p>
+
+    <h2>3. Background location</h2>
+    <p>
+      PinLink can keep sharing your location while the app is closed. For that it uses the
+      <code>ACCESS_BACKGROUND_LOCATION</code> permission and a foreground service of type location.
+    </p>
+    <ul>
+      <li>Before asking for background location, the app shows an in-app <b>prominent disclosure</b>; the system permission dialog appears only after you accept it.</li>
+      <li>While sharing, a notification ("Sharing your location") stays in the status bar. Its <b>Stop</b> button ends sharing immediately.</li>
+      <li>If you do not allow background location, sharing still works while the app is open.</li>
+      <li>With a time limit (1, 3, 8 or 24 hours) the service stops by itself the moment the time runs out.</li>
+    </ul>
+
+    <h2>4. How we use it</h2>
+    <ul>
+      <li>To draw your pin on the room map and show last update, battery and movement state.</li>
+      <li>To show a meeting point to everyone in the room.</li>
+      <li>To display ads so the app can stay free (Google AdMob).</li>
+    </ul>
+    <p>We do not use the information for anything else, and we never sell or hand your location to advertisers.</p>
+
+    <h2>5. Who can see it</h2>
+    <ul>
+      <li>Only <b>members of the same room</b>. Anyone who knows the room code can join, so share the code only with people you trust.</li>
+      <li>Your location never appears on a public map, in search, or in a profile list.</li>
+      <li>While paused, your pin shows as hidden and your coordinates stop updating.</li>
+    </ul>
+
+    <h2>6. Retention and deletion</h2>
+    <ul>
+      <li>Coordinates stay on our server (Google Cloud Firestore) only while the room is alive, and each new position overwrites the previous one.</li>
+      <li><b>Leave room</b> deletes your member document from the server, so nobody can see your location afterwards.</li>
+      <li>When a timed share ends or you pause, updates stop and your pin becomes hidden.</li>
+      <li>Room data (code, meeting point) is cleaned up periodically once a room is unused. To request deletion, contact us at section 12 with the room code.</li>
+      <li>Uninstalling the app removes all local settings, profile and room membership from the device.</li>
+    </ul>
+
+    <h2>7. Third-party services</h2>
+    <ul>
+      <li><b>Google Firebase (Cloud Firestore)</b> — stores and reads room and location documents. Google LLC's privacy policy applies.</li>
+      <li><b>Google AdMob</b> — serves banner and full-screen ads and may process device information such as the advertising ID. You can reset or disable personalized ads in Android settings.</li>
+      <li><b>OpenStreetMap / CARTO</b> — serves map tiles; those servers see your IP address.</li>
+    </ul>
+
+    <h2>8. Ads</h2>
+    <p>
+      The app may show a banner at the very bottom of the screen and a full-screen ad right after you create or join a room.
+      This build uses Google's <b>test ad units</b>; real units replace them before release. Location is not used for ad targeting.
+    </p>
+
+    <h2>9. Children</h2>
+    <p>PinLink is not directed to children under 14 and we do not knowingly collect their location.</p>
+
+    <h2>10. Permissions</h2>
+    <ul>
+      <li><code>ACCESS_FINE_LOCATION</code>, <code>ACCESS_COARSE_LOCATION</code> — show and share your position</li>
+      <li><code>ACCESS_BACKGROUND_LOCATION</code> — sharing while the app is closed (optional)</li>
+      <li><code>FOREGROUND_SERVICE</code>, <code>FOREGROUND_SERVICE_LOCATION</code> — the ongoing notification service</li>
+      <li><code>POST_NOTIFICATIONS</code> — the sharing notification</li>
+      <li><code>INTERNET</code>, <code>ACCESS_NETWORK_STATE</code> — maps, room sync and ads</li>
+    </ul>
+
+    <h2>11. Your choices</h2>
+    <ul>
+      <li>Pause sharing or leave a room at any time.</li>
+      <li>Revoke location permission in Android Settings → Apps → PinLink → Permissions.</li>
+      <li>Read this policy again in the app under <b>Settings → Privacy policy</b>.</li>
+    </ul>
+
+    <h2>12. Contact</h2>
+    <p>For privacy questions or deletion requests:</p>
+    <ul>
+      <li>Developer: Topster</li>
+      <li>Email: <a href="mailto:youngsujoa1@gmail.com">youngsujoa1@gmail.com</a></li>
+    </ul>
+    <p class="sub">If this policy changes, we will update this page together with an app update.</p>
+  </section>
+
+  <footer>
+    PinLink 1.0.0 · Topster · <a href="mailto:youngsujoa1@gmail.com">youngsujoa1@gmail.com</a>
+  </footer>
+</div>
+
+<script>
+  function show(lang) {
+    document.getElementById('ko').hidden = lang !== 'ko';
+    document.getElementById('en').hidden = lang !== 'en';
+    document.getElementById('btn-ko').setAttribute('aria-pressed', lang === 'ko');
+    document.getElementById('btn-en').setAttribute('aria-pressed', lang === 'en');
+    document.documentElement.lang = lang;
+  }
+  (function () {
+    var preferred = (navigator.language || 'ko').toLowerCase().indexOf('ko') === 0 ? 'ko' : 'en';
+    show(preferred);
+  })();
+</script>
+</body>
+</html>

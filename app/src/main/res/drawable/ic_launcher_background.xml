@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 아이콘 그림의 배경(위는 거의 검정 남색, 아래는 푸른 빛)과 같은 그라데이션 —
+     적응형 아이콘에서 그림 가장자리가 배경과 이어져 보이게 한다 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:type="linear"
+        android:angle="270"
+        android:startColor="#00051D"
+        android:centerColor="#011034"
+        android:endColor="#021E58" />
+</shape>

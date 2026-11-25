@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">PinLink</string>
+
+    <!-- 첫 실행 언어 선택 -->
+    <string name="onboarding_language_title">Choose your language</string>
+    <string name="onboarding_language_sub">PinLink will use this language. You can change it anytime.</string>
+    <string name="onboarding_start">Start</string>
+    <string name="onboarding_language_note">PinLink only shares your location with the room code you choose.</string>
+    <string name="language_system">Follow device language</string>
+
+    <!-- 탭 -->
+    <string name="tab_map">Map</string>
+    <string name="tab_room">Room</string>
+    <string name="tab_settings">Settings</string>
+
+    <!-- 시작 화면 -->
+    <string name="lobby_badge">GLOBAL · LIVE LOCATION</string>
+    <string name="lobby_hero_title">Everyone in one room, on one map</string>
+    <string name="lobby_hero_sub">Create a room, send the 6-character code, and each member sees where the others are — for an hour or all day.</string>
+    <string name="btn_create_room">Create a room</string>
+    <string name="btn_join_room">Join with a code</string>
+    <string name="lobby_tip_title">How it works</string>
+    <string name="lobby_tip_1">Add a nickname and an avatar color</string>
+    <string name="lobby_tip_2">Send the 6-character room code to your friends</string>
+    <string name="lobby_tip_3">Pick how long to share — pause or stop anytime</string>
+    <string name="lobby_always_note">Your location is never public. Only members with the room code can see it.</string>
+
+    <!-- 방 만들기 -->
+    <string name="create_title">Create a room</string>
+    <string name="create_sub">Friends see you as this name and color</string>
+    <string name="field_nickname">Nickname</string>
+    <string name="field_nickname_hint">How friends see you</string>
+    <string name="label_avatar_color">Avatar color</string>
+    <string name="btn_create_now">Create room</string>
+    <string name="err_nickname_required">Enter a nickname</string>
+
+    <!-- 코드로 참여 -->
+    <string name="join_title">Join a room</string>
+    <string name="join_sub">Enter the 6-character code a friend sent you</string>
+    <string name="field_code">Room code</string>
+    <string name="field_code_hint">ABC123</string>
+    <string name="btn_join_now">Join</string>
+    <string name="err_code_needed">The code is 6 letters or numbers</string>
+    <string name="err_room_not_found">That room was not found. Check the code.</string>
+    <string name="join_demo_note">Demo mode: the room opens with two simulated friends so you can try the map.</string>
+
+    <!-- 방 화면 -->
+    <string name="room_code_title">Room code</string>
+    <string name="room_code_sub">Anyone with this code can join</string>
+    <string name="btn_copy">Copy</string>
+    <string name="btn_share">Share</string>
+    <string name="code_copied">Room code copied</string>
+    <string name="invite_message">Join me on PinLink and see my live location. Room code: %1$s</string>
+    <string name="share_chooser_title">Share room code</string>
+    <string name="members_title">In this room</string>
+    <string name="members_count">%1$d member(s) sharing</string>
+    <string name="member_you">You</string>
+    <string name="member_battery">%1$d%% battery</string>
+    <string name="state_moving">Moving</string>
+    <string name="state_stopped">Stopped</string>
+    <string name="last_update_now">just now</string>
+    <string name="last_update_min">%1$d min ago</string>
+    <string name="last_update_hours">%1$d h ago</string>
+    <string name="last_update_stale">not updating</string>
+    <string name="sharing_live">Sharing now</string>
+    <string name="sharing_paused">Hidden</string>
+    <string name="section_share_mode">Location sharing</string>
+    <string name="share_always">Always</string>
+    <string name="share_always_desc">Keeps sharing while the app is closed</string>
+    <string name="share_1h">1 hour</string>
+    <string name="share_3h">3 hours</string>
+    <string name="share_8h">8 hours</string>
+    <string name="share_24h">24 hours</string>
+    <string name="share_paused">Hide my location</string>
+    <string name="share_paused_desc">Friends see your pin as paused</string>
+    <string name="share_expires">Ends in %1$s</string>
+    <string name="share_no_expiry">No time limit</string>
+    <string name="share_expired">Sharing ended — turn it on to share again</string>
+    <string name="section_meeting">Meeting point</string>
+    <string name="meeting_none">No meeting point yet</string>
+    <string name="meeting_set_by">Set by %1$s</string>
+    <string name="btn_pick_meeting">Pick on map</string>
+    <string name="btn_clear_meeting">Remove</string>
+    <string name="btn_leave_room">Leave room</string>
+    <string name="leave_room_title">Leave this room?</string>
+    <string name="leave_room_body">Your pin is removed from the room right away. Members will not see your location after that.</string>
+    <string name="leave">Leave</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+    <string name="room_empty">Share the code so friends can join.</string>
+
+    <!-- 지도 -->
+    <string name="map_style_toggle">Map style (light / dark)</string>
+    <string name="map_recenter">My location</string>
+    <string name="btn_meeting_pin">Meeting point</string>
+    <string name="pick_mode_title">Move the map to the spot everyone meets</string>
+    <string name="pick_mode_action">Set here</string>
+    <string name="meeting_name_title">Name this meeting point</string>
+    <string name="meeting_name_hint">e.g. Gangnam Station Exit 10</string>
+    <string name="meeting_name_default">Meeting point</string>
+    <string name="map_demo_banner">Demo preview — friends are simulated. Add a Firebase key to sync real rooms.</string>
+    <string name="map_no_fix">Finding your location…</string>
+    <string name="map_local_only">Background location is off — sharing works while the app is open.</string>
+    <string name="status_sharing">Sharing</string>
+    <string name="status_hidden">Hidden</string>
+    <string name="toast_meeting_set">Meeting point shared with the room</string>
+    <string name="toast_meeting_cleared">Meeting point removed</string>
+    <string name="toast_location_denied">Allow location to share where you are.</string>
+    <string name="toast_background_denied">Background location is off — sharing continues only while the app is open.</string>
+    <string name="toast_sharing_started">Sharing your location</string>
+    <string name="toast_joined">You joined the room</string>
+
+    <!-- 설정 -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_profile">Profile</string>
+    <string name="settings_language">App language</string>
+    <string name="settings_privacy">Privacy policy</string>
+    <string name="settings_location">Location permission</string>
+    <string name="settings_location_allowed">Allowed all the time</string>
+    <string name="settings_location_foreground">While the app is open</string>
+    <string name="settings_location_denied">Not allowed</string>
+    <string name="settings_open_system">Open system settings</string>
+    <string name="settings_ads">Ads</string>
+    <string name="settings_ads_note">PinLink shows a banner at the bottom of the screen and a full-screen ad when a room is opened. Test ad units are used in this build.</string>
+    <string name="settings_about">About</string>
+    <string name="settings_version">Version %1$s</string>
+    <string name="settings_sync_live">Live sync: connected server</string>
+    <string name="settings_sync_demo">Live sync: demo mode (no server key)</string>
+    <string name="about_body">PinLink keeps your location inside the room you joined. Coordinates are sent only while sharing is on, and the pin disappears when you leave or the time you chose runs out.</string>
+    <string name="settings_edit_profile">Edit profile</string>
+
+    <!-- 백그라운드 위치 명시적 안내 (Play 정책) -->
+    <string name="disclosure_title">Before you start sharing</string>
+    <string name="disclosure_body">PinLink collects your location — including when the app is closed or running in the background — to show it to the members of the room you joined. Sharing stops when the time you chose ends, when you tap \"Hide my location\", or when you leave the room. Your coordinates are sent to the room\'s server and remain only while the room is active.</string>
+    <string name="disclosure_accept">I understand — continue</string>
+    <string name="disclosure_decline">Not now</string>
+    <string name="bg_disclosure_title">Allow location all the time?</string>
+    <string name="bg_disclosure_body">To keep sharing after you close PinLink, choose \"Allow all the time\" for location. If you choose \"While using the app\", sharing stops when you leave the app.</string>
+    <string name="bg_disclosure_open">Open settings</string>
+    <string name="bg_disclosure_later">Later</string>
+
+    <!-- 알림 -->
+    <string name="notif_channel_name">Location sharing</string>
+    <string name="notif_channel_desc">Shows a notification while your location is shared with a room.</string>
+    <string name="notif_title">Sharing your location</string>
+    <string name="notif_text_room">Room %1$s</string>
+    <string name="notif_text_expiry">Room %1$s · ends in %2$s</string>
+    <string name="notif_text_paused">Room %1$s · paused</string>
+    <string name="notif_stop">Stop</string>
+
+    <!-- 오류 -->
+    <string name="err_network">Couldn\'t reach the server. Check your connection.</string>
+    <string name="err_create_failed">Couldn\'t create the room. Try again.</string>
+    <string name="err_join_failed">Couldn\'t join the room. Try again.</string>
+    <string name="startup_error_title">Something went wrong while opening the screen. Tap Try again.</string>
+    <string name="startup_error_retry">Try again</string>
+    <string name="last_crash_title">The app closed unexpectedly last time</string>
+    <string name="last_crash_sub">Please screenshot this and send it over — the cause is in the text below.</string>
+    <string name="last_crash_copy">Copy</string>
+    <string name="crash_copied">Copied</string>
+    <string name="close">Close</string>
+</resources>

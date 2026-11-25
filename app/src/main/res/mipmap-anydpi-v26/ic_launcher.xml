@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    적응형 아이콘.
+    앞면은 벡터가 아니라 그림(PNG, mipmap-*dpi/ic_launcher_foreground)을 쓴다.
+    갤럭시 런처·삼성 앱 보호 화면이 벡터 앞면을 못 읽고 기본 안드로이드 아이콘으로
+    떨어지던 문제를 없애기 위해서다(같은 계열 앱들이 쓰는 방식과 동일).
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
+</adaptive-icon>

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PinLink — 실시간 위치 공유 · Real-time location sharing</title>
+<meta name="description" content="PinLink는 6자리 방 코드로 친구·가족과 서로의 실시간 위치를 한 지도에서 보는 안드로이드 앱입니다. 개발자 Topster.">
+<meta name="theme-color" content="#060B12">
+<style>
+  :root{
+    --bg:#F4F7FB; --card:#FFFFFF; --text:#101A24; --muted:#5A6A7B;
+    --line:#DCE5EF; --accent:#0E8A6A; --accent-soft:#E2F7EF;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#060B12; --card:#0B1420; --text:#EAF0FA; --muted:#93A4BE;
+      --line:#22314A; --accent:#2BD9A6; --accent-soft:#0E3A31;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--text); line-height:1.72;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",Roboto,sans-serif;}
+  .wrap{max-width:760px; margin:0 auto; padding:30px 18px 60px}
+  .hero{display:flex; gap:16px; align-items:center; margin:10px 0 24px}
+  .mark{width:66px;height:66px;flex:0 0 66px;border-radius:18px;
+    background:radial-gradient(circle at 35% 28%, #2BD9A6, #0A5B49 60%, #06131A);
+    box-shadow:0 8px 24px rgba(43,217,166,.28)}
+  h1{font-size:26px; margin:0 0 2px; letter-spacing:-.02em}
+  .byline{color:var(--muted); font-size:14px; margin:0}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:18px; padding:18px 20px; margin:14px 0}
+  h2{font-size:17px; margin:0 0 8px}
+  ul{margin:8px 0 0 0; padding-left:20px}
+  li{margin:5px 0}
+  .pill{display:inline-block; background:var(--accent-soft); color:var(--accent);
+    border-radius:999px; padding:4px 12px; font-size:12.5px; font-weight:700; letter-spacing:.04em}
+  a{color:var(--accent)}
+  footer{margin-top:30px; padding-top:14px; border-top:1px solid var(--line); color:var(--muted); font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div class="mark" aria-hidden="true"></div>
+    <div>
+      <h1>PinLink</h1>
+      <p class="byline">Topster · Android</p>
+    </div>
+  </div>
+
+  <span class="pill">GLOBAL · LIVE LOCATION</span>
+
+  <div class="card">
+    <h2>같은 방, 같은 지도</h2>
+    <p>
+      PinLink는 6자리 방 코드 하나로 친구·가족·동료가 같은 방에 들어와 서로의 실시간 위치를 한 지도에서 보는 앱입니다.
+      공유 시간은 <b>계속 / 1시간 / 3시간 / 8시간 / 24시간</b> 중에 고르고, 언제든 <b>일시정지</b>하거나 방을 나갈 수 있습니다.
+    </p>
+    <ul>
+      <li>멤버별 핀: 닉네임·아바타 색·마지막 갱신·배터리·이동 중/정지</li>
+      <li>약속 장소(집결 핀)를 지도에서 찍어 방 전체에 공유</li>
+      <li>앱을 닫아도 공유 — 공유 중에는 알림에서 바로 멈출 수 있어요</li>
+      <li>한국어 · English · 日本語 · 中文 · Español</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Privacy first</h2>
+    <p>Your location is never public. Only the members of the room you joined can see it — no public map, no search.</p>
+    <p><a href="privacy.html">개인정보 처리방침 · Privacy Policy →</a></p>
+  </div>
+
+  <div class="card">
+    <h2>문의 · Contact</h2>
+    <p>개발자 Topster · <a href="mailto:youngsujoa1@gmail.com">youngsujoa1@gmail.com</a></p>
+  </div>
+
+  <footer>PinLink 1.0.0 · Topster</footer>
+</div>
+</body>
+</html>

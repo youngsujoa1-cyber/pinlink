@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="onboarding_language_title">사용할 언어를 골라 주세요</string>
+    <string name="onboarding_language_sub">PinLink가 이 언어로 표시됩니다. 언제든 바꿀 수 있어요.</string>
+    <string name="onboarding_start">시작하기</string>
+    <string name="onboarding_language_note">내 위치는 내가 고른 방의 멤버에게만 보여요.</string>
+    <string name="language_system">기기 언어 따르기</string>
+
+    <string name="tab_map">지도</string>
+    <string name="tab_room">방</string>
+    <string name="tab_settings">설정</string>
+
+    <string name="lobby_badge">글로벌 · 실시간 위치</string>
+    <string name="lobby_hero_title">같은 방, 같은 지도</string>
+    <string name="lobby_hero_sub">방을 만들고 6자리 코드를 보내면, 멤버 모두가 한 지도에서 서로의 위치를 봅니다. 한 시간만, 또는 하루 종일.</string>
+    <string name="btn_create_room">새 방 만들기</string>
+    <string name="btn_join_room">코드로 참여하기</string>
+    <string name="lobby_tip_title">이렇게 써요</string>
+    <string name="lobby_tip_1">닉네임과 아바타 색을 정해요</string>
+    <string name="lobby_tip_2">6자리 방 코드를 친구에게 보내요</string>
+    <string name="lobby_tip_3">공유 시간을 고르고, 언제든 일시정지</string>
+    <string name="lobby_always_note">위치는 공개되지 않아요. 방 코드를 아는 멤버만 볼 수 있어요.</string>
+
+    <string name="create_title">새 방 만들기</string>
+    <string name="create_sub">친구에게 이 이름과 색으로 보여요</string>
+    <string name="field_nickname">닉네임</string>
+    <string name="field_nickname_hint">친구에게 보일 이름</string>
+    <string name="label_avatar_color">아바타 색</string>
+    <string name="btn_create_now">방 만들기</string>
+    <string name="err_nickname_required">닉네임을 입력해 주세요</string>
+
+    <string name="join_title">코드로 참여하기</string>
+    <string name="join_sub">친구에게 받은 6자리 코드를 입력하세요</string>
+    <string name="field_code">방 코드</string>
+    <string name="field_code_hint">ABC123</string>
+    <string name="btn_join_now">참여하기</string>
+    <string name="err_code_needed">코드는 6자리 영문·숫자예요</string>
+    <string name="err_room_not_found">그 방을 찾을 수 없어요. 코드를 확인해 주세요.</string>
+    <string name="join_demo_note">데모 모드: 시뮬레이션 친구 2명과 함께 지도를 써 볼 수 있어요.</string>
+
+    <string name="room_code_title">방 코드</string>
+    <string name="room_code_sub">이 코드를 아는 사람은 누구나 참여할 수 있어요</string>
+    <string name="btn_copy">복사</string>
+    <string name="btn_share">공유</string>
+    <string name="code_copied">방 코드를 복사했어요</string>
+    <string name="invite_message">PinLink에서 내 실시간 위치를 봐요. 방 코드: %1$s</string>
+    <string name="share_chooser_title">방 코드 공유</string>
+    <string name="members_title">이 방의 멤버</string>
+    <string name="members_count">%1$d명이 공유 중</string>
+    <string name="member_you">나</string>
+    <string name="member_battery">배터리 %1$d%%</string>
+    <string name="state_moving">이동 중</string>
+    <string name="state_stopped">정지</string>
+    <string name="last_update_now">방금 전</string>
+    <string name="last_update_min">%1$d분 전</string>
+    <string name="last_update_hours">%1$d시간 전</string>
+    <string name="last_update_stale">갱신 없음</string>
+    <string name="sharing_live">공유 중</string>
+    <string name="sharing_paused">숨김</string>
+    <string name="section_share_mode">위치 공유</string>
+    <string name="share_always">계속 공유</string>
+    <string name="share_always_desc">앱을 닫아도 계속 공유해요</string>
+    <string name="share_1h">1시간만</string>
+    <string name="share_3h">3시간만</string>
+    <string name="share_8h">8시간만</string>
+    <string name="share_24h">24시간만</string>
+    <string name="share_paused">일시정지 (내 위치 숨기기)</string>
+    <string name="share_paused_desc">친구에게 내 핀이 숨김으로 보여요</string>
+    <string name="share_expires">%1$s 후 자동 종료</string>
+    <string name="share_no_expiry">시간 제한 없음</string>
+    <string name="share_expired">공유가 끝났어요 — 다시 켜면 공유돼요</string>
+    <string name="section_meeting">약속 장소</string>
+    <string name="meeting_none">아직 약속 장소가 없어요</string>
+    <string name="meeting_set_by">%1$s님이 지정</string>
+    <string name="btn_pick_meeting">지도에서 찍기</string>
+    <string name="btn_clear_meeting">지우기</string>
+    <string name="btn_leave_room">방 나가기</string>
+    <string name="leave_room_title">이 방에서 나갈까요?</string>
+    <string name="leave_room_body">내 핀이 방에서 바로 사라집니다. 이후에는 멤버가 내 위치를 볼 수 없어요.</string>
+    <string name="leave">나가기</string>
+    <string name="cancel">취소</string>
+    <string name="save">저장</string>
+    <string name="room_empty">코드를 공유해 친구를 초대해 보세요.</string>
+
+    <string name="map_style_toggle">지도 스타일 바꾸기</string>
+    <string name="map_recenter">내 위치</string>
+    <string name="btn_meeting_pin">약속 장소</string>
+    <string name="pick_mode_title">모일 곳으로 지도를 옮기세요</string>
+    <string name="pick_mode_action">여기로 지정</string>
+    <string name="meeting_name_title">약속 장소 이름</string>
+    <string name="meeting_name_hint">예: 강남역 10번 출구</string>
+    <string name="meeting_name_default">약속 장소</string>
+    <string name="map_demo_banner">데모 미리보기 — 친구는 시뮬레이션이에요. Firebase 키를 넣으면 실제 방과 동기화됩니다.</string>
+    <string name="map_no_fix">내 위치를 찾는 중…</string>
+    <string name="map_local_only">백그라운드 위치가 꺼져 있어 앱을 열어 둔 동안만 공유돼요.</string>
+    <string name="status_sharing">공유 중</string>
+    <string name="status_hidden">숨김</string>
+    <string name="toast_meeting_set">약속 장소를 방에 공유했어요</string>
+    <string name="toast_meeting_cleared">약속 장소를 지웠어요</string>
+    <string name="toast_location_denied">위치를 공유하려면 위치 권한이 필요해요.</string>
+    <string name="toast_background_denied">백그라운드 위치가 꺼져 있어요 — 앱을 열어 둔 동안만 공유돼요.</string>
+    <string name="toast_sharing_started">위치 공유를 시작했어요</string>
+    <string name="toast_joined">방에 들어왔어요</string>
+
+    <string name="settings_title">설정</string>
+    <string name="settings_profile">프로필</string>
+    <string name="settings_language">앱 언어</string>
+    <string name="settings_privacy">개인정보 처리방침</string>
+    <string name="settings_location">위치 권한</string>
+    <string name="settings_location_allowed">항상 허용됨</string>
+    <string name="settings_location_foreground">앱을 쓰는 동안만</string>
+    <string name="settings_location_denied">허용 안 됨</string>
+    <string name="settings_open_system">시스템 설정 열기</string>
+    <string name="settings_ads">광고</string>
+    <string name="settings_ads_note">PinLink는 화면 최하단에 배너 광고를, 방을 열 때 전면 광고를 보여 줍니다. 이 빌드는 테스트 광고 단위를 씁니다.</string>
+    <string name="settings_about">정보</string>
+    <string name="settings_version">버전 %1$s</string>
+    <string name="settings_sync_live">실시간 동기화: 서버 연결됨</string>
+    <string name="settings_sync_demo">실시간 동기화: 데모 모드 (서버 키 없음)</string>
+    <string name="about_body">PinLink는 내 위치를 내가 들어간 방 안에만 둡니다. 공유가 켜진 동안에만 좌표를 보내고, 방을 나가거나 고른 시간이 끝나면 핀이 사라져요.</string>
+    <string name="settings_edit_profile">프로필 수정</string>
+
+    <string name="disclosure_title">공유를 시작하기 전에</string>
+    <string name="disclosure_body">PinLink는 앱이 닫혀 있거나 백그라운드에 있을 때도 선택한 방의 멤버에게 위치를 공유하기 위해 위치 정보를 수집합니다. 공유는 고른 시간이 끝나거나 \'내 위치 숨기기\'를 누르거나 방을 나가면 멈춥니다. 좌표는 방 서버로 전송되며 방이 살아 있는 동안만 남습니다.</string>
+    <string name="disclosure_accept">이해했어요, 계속</string>
+    <string name="disclosure_decline">나중에</string>
+    <string name="bg_disclosure_title">위치를 \'항상 허용\'할까요?</string>
+    <string name="bg_disclosure_body">PinLink를 닫은 뒤에도 공유하려면 위치를 \'항상 허용\'으로 골라 주세요. \'앱을 사용하는 동안\'을 고르면 앱을 나갈 때 공유가 멈춥니다.</string>
+    <string name="bg_disclosure_open">설정 열기</string>
+    <string name="bg_disclosure_later">나중에</string>
+
+    <string name="notif_channel_name">위치 공유</string>
+    <string name="notif_channel_desc">위치를 방과 공유하는 동안 알림을 표시합니다.</string>
+    <string name="notif_title">위치를 공유하고 있어요</string>
+    <string name="notif_text_room">방 %1$s</string>
+    <string name="notif_text_expiry">방 %1$s · %2$s 후 종료</string>
+    <string name="notif_text_paused">방 %1$s · 일시정지</string>
+    <string name="notif_stop">중지</string>
+
+    <string name="err_network">서버에 연결하지 못했어요. 인터넷 연결을 확인해 주세요.</string>
+    <string name="err_create_failed">방을 만들지 못했어요. 다시 시도해 주세요.</string>
+    <string name="err_join_failed">참여하지 못했어요. 다시 시도해 주세요.</string>
+    <string name="startup_error_title">화면을 여는 중에 문제가 생겼어요. 아래 [다시 열기]를 눌러 주세요.</string>
+    <string name="startup_error_retry">다시 열기</string>
+    <string name="last_crash_title">지난번에 앱이 갑자기 닫혔어요</string>
+    <string name="last_crash_sub">아래 내용을 캡처해서 보내 주시면 원인을 바로 찾을 수 있어요.</string>
+    <string name="last_crash_copy">복사</string>
+    <string name="crash_copied">복사했어요</string>
+    <string name="close">닫기</string>
+</resources>
