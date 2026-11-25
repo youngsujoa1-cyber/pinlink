@@ -122,6 +122,10 @@ app/src/main/java/com/youngsu/pinlink/
 
 - 앱 안: 설정 → 개인정보 처리방침 (`app/src/main/assets/privacy.html`)
 - 웹 게시용: `docs/privacy.html` (GitHub Pages 등에 그대로 올리면 한국어/영어 전환 가능)
+- 공개 주소(GitHub Pages `main` → `/docs` 활성화 후)
+  - 앱 소개: <https://youngsujoa1-cyber.github.io/pinlink/>
+  - 개인정보 처리방침: <https://youngsujoa1-cyber.github.io/pinlink/privacy.html> — Play Console 개인정보 처리방침 URL 로 넣을 주소
+  - `app-ads.txt`: <https://youngsujoa1-cyber.github.io/pinlink/app-ads.txt> (AdMob 크롤러가 보는 도메인 루트는 `youngsujoa1-cyber.github.io` 라서, 루트 저장소 `youngsujoa1-cyber.github.io` 에도 같은 파일이 있어야 인증된다)
 
 ## 검증한 것 / 못 한 것
 
