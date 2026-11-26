@@ -96,7 +96,7 @@ class MapScreen(private val host: MainActivity) {
         demoBanner = Ui.pill(
             act,
             act.getString(R.string.map_demo_banner),
-            act.getColor(R.color.warn_dim),
+            act.getColor(R.color.glass_strong),
             act.getColor(R.color.warn),
             10.5f
         ).apply {
@@ -179,7 +179,7 @@ class MapScreen(private val host: MainActivity) {
         backgroundHint = Ui.pill(
             act,
             act.getString(R.string.map_local_only),
-            act.getColor(R.color.warn_dim),
+            act.getColor(R.color.glass_strong),
             act.getColor(R.color.warn),
             10.5f
         ).apply {
@@ -208,7 +208,7 @@ class MapScreen(private val host: MainActivity) {
         memberCardDot = View(act).apply {
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(Color.parseColor("#2BD9A6"))
+                setColor(Color.parseColor("#E5C158"))
             }
         }
         memberCard.addView(memberCardDot, LinearLayout.LayoutParams(act.dp(10f), act.dp(10f)).apply {

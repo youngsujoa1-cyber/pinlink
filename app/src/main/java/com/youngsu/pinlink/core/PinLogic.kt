@@ -403,7 +403,7 @@ object FirestoreCodec {
         return Member(
             id = id,
             name = str(fields, "name") ?: "Guest",
-            color = str(fields, "color") ?: "#2BD9A6",
+            color = str(fields, "color") ?: "#E5C158",
             lat = lat,
             lng = lng,
             battery = integer(fields, "battery") ?: -1,

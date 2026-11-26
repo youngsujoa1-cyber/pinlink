@@ -148,10 +148,10 @@ class MemberMapView @JvmOverloads constructor(
         textAlign = Paint.Align.CENTER
     }
 
-    private val meetingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#2BD9A6") }
+    private val meetingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#E5C158") }
     private val meetingPath = Path()
 
-    private val pickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#2BD9A6") }
+    private val pickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#E5C158") }
     private val pickHalo = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 2f * density
@@ -585,7 +585,7 @@ class MemberMapView @JvmOverloads constructor(
             color = Color.parseColor("#0B1420")
         }
         canvas.drawLine(px, py - 2f * density, px, top, pole)
-        meetingPaint.color = Color.parseColor("#2BD9A6")
+        meetingPaint.color = Color.parseColor("#E5C158")
         meetingPath.reset()
         meetingPath.moveTo(px + 1f * density, top)
         meetingPath.lineTo(px + 20f * density, top + 6f * density)
@@ -629,7 +629,7 @@ class MemberMapView @JvmOverloads constructor(
 
         canvas.drawCircle(tipX, headCy, headR + 2.5f * density, pinStroke)
         canvas.drawCircle(tipX, headCy, headR, pickPaint)
-        canvas.drawCircle(tipX, headCy, headR * 0.32f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#03231C") })
+        canvas.drawCircle(tipX, headCy, headR * 0.32f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#0B0F19") })
     }
 
     private fun drawLabel(

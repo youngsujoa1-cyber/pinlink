@@ -60,7 +60,7 @@ class SettingsScreen(private val host: MainActivity) {
         // ---------------------------------------------------------- 프로필 카드
         val profile = card()
         val profileRow = Ui.row(act)
-        avatar = Ui.text(act, "?", 18f, Color.parseColor("#03231C"), bold = true).apply {
+        avatar = Ui.text(act, "?", 18f, Color.parseColor("#0B0F19"), bold = true).apply {
             gravity = Gravity.CENTER
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL

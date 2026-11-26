@@ -21,7 +21,16 @@ class AppPrefs private constructor(context: Context) {
 
     /** 아바타 색 — 팔레트의 색 문자열(#RRGGBB) */
     var color: String
-        get() = prefs.getString(KEY_COLOR, AvatarPalette.DEFAULT).orEmpty()
+        get() {
+            val saved = prefs.getString(KEY_COLOR, AvatarPalette.DEFAULT).orEmpty()
+            if (saved.isBlank()) return AvatarPalette.DEFAULT
+            // v1.0.5: 예전 기본값(민트)은 새 프리미엄 팔레트의 기본(샴페인)으로 한 번만 옮긴다
+            if (saved.equals(AvatarPalette.LEGACY_DEFAULT, ignoreCase = true)) {
+                prefs.edit().putString(KEY_COLOR, AvatarPalette.DEFAULT).apply()
+                return AvatarPalette.DEFAULT
+            }
+            return saved
+        }
         set(value) = prefs.edit().putString(KEY_COLOR, value).apply()
 
     /** 이 기기의 식별자 — 방 문서의 멤버 ID. 앱을 지우면 새로 생긴다(개인정보 아님) */
@@ -124,18 +133,22 @@ class AppPrefs private constructor(context: Context) {
 
 /** 멤버 아바타 색 — 지도 핀·목록·프로필이 같은 색을 쓴다 */
 object AvatarPalette {
+    /** v1.0.5 — 옵시디언 바탕 위에서 고급스럽게 읽히는 톤(샴페인·플래티넘·시안 중심) */
     val COLORS = listOf(
-        "#2BD9A6", // mint
-        "#4C8DFF", // sky
-        "#FF7A59", // coral
-        "#B776FF", // violet
-        "#FFC94D", // amber
-        "#FF5C8A", // rose
-        "#38D0E8", // cyan
-        "#8FE05A"  // lime
+        "#E5C158", // champagne
+        "#B9A7FF", // orchid
+        "#6FE3FF", // cyan
+        "#C9D3E0", // platinum
+        "#7FDCC0", // jade
+        "#F2A9B4", // rose
+        "#F0B183", // copper
+        "#9FB4D8"  // steel
     )
 
     val DEFAULT: String = COLORS.first()
+
+    /** v1.0.4 까지의 기본값 — 프리미엄 톤으로 옮겨 준다 */
+    const val LEGACY_DEFAULT = "#2BD9A6"
 
     fun next(current: String): String {
         val index = COLORS.indexOf(current)
