@@ -138,7 +138,7 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
     override fun fetchRoom(code: String, onDone: (RoomLookup) -> Unit) {
         read("GET rooms/$code", "${roomUrl(code)}?key=$apiKey") { reply ->
             if (reply == null) {
-                onDone(RoomLookup.Failed(SyncFault.offline("응답 없음")))
+                onDone(RoomLookup.Failed(SyncFault.offline("no response")))
                 return@read
             }
             when {
@@ -163,9 +163,9 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
                 is RoomLookup.Found -> onDone(null)
                 is RoomLookup.Failed -> onDone(lookup.fault)
                 is RoomLookup.Missing -> {
-                    SyncLog.record("방 없음 → 다시 만듦", "rooms/${seed.code}")
+                    SyncLog.record("room-missing", "rooms/${seed.code} → create")
                     createRoom(seed.code, seed.owner, seed.createdAt) { fault ->
-                        if (fault == null) SyncLog.record("방 되살림 완료", "rooms/${seed.code}")
+                        if (fault == null) SyncLog.record("room-recreated", "rooms/${seed.code}")
                         onDone(fault)
                     }
                 }
@@ -182,7 +182,7 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
     override fun members(code: String, onDone: (List<Member>?, SyncFault?) -> Unit) {
         read("GET members", "${membersUrl(code)}?key=$apiKey&pageSize=50") { reply ->
             if (reply == null) {
-                onDone(null, SyncFault.offline("응답 없음"))
+                onDone(null, SyncFault.offline("no response"))
                 return@read
             }
             if (!reply.ok) {
@@ -236,7 +236,7 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
     private fun send(tag: String, url: String, method: String, body: String, onDone: (SyncFault?) -> Unit) {
         pool.execute {
             val reply = call(tag, url, method, body)
-            val fault = if (reply == null) SyncFault.offline("연결 실패") else faultOf(reply)
+            val fault = if (reply == null) SyncFault.offline("connection failed") else faultOf(reply)
             main.post { onDone(fault) }
         }
     }
@@ -283,8 +283,8 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
             Reply(code, text)
         } catch (error: Throwable) {
             val reason = when (error) {
-                is SocketTimeoutException -> "시간 초과"
-                is UnknownHostException -> "주소를 찾을 수 없음"
+                is SocketTimeoutException -> "timeout"
+                is UnknownHostException -> "unknown host"
                 else -> error.javaClass.simpleName + (error.message?.let { ": $it" } ?: "")
             }
             SyncLog.record(tag, "$path → 실패 · $reason")

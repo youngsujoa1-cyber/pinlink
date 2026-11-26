@@ -197,7 +197,7 @@ object PinSession {
                 }
                 is RoomLookup.Failed -> {
                     // 서버에 닿지 못했으면 코드를 바꿔 가며 재시도하지 않는다 (같은 결과)
-                    noteFault("방 만들기", lookup.fault)
+                    noteFault("create-room", lookup.fault)
                     finishCreate(false, startSharing, onDone)
                 }
                 is RoomLookup.Missing -> {
@@ -206,7 +206,7 @@ object PinSession {
                         if (fault == null) {
                             enterRoom(code, owner = true, startSharing = startSharing, createdAt = createdAt)
                         } else {
-                            noteFault("방 만들기", fault)
+                            noteFault("create-room", fault)
                         }
                         finishCreate(fault == null, startSharing, onDone)
                     }
@@ -228,7 +228,7 @@ object PinSession {
         engine.fetchRoom(code) { lookup ->
             when (lookup) {
                 is RoomLookup.Failed -> {
-                    noteFault("방 참여", lookup.fault)
+                    noteFault("join-room", lookup.fault)
                     busy = false
                     notifyChanged()
                     onDone(false, "network")
@@ -274,7 +274,7 @@ object PinSession {
                 }
                 is RoomLookup.Failed -> {
                     // 확인 자체를 못했으면 '없다'고 단정하지 않는다
-                    noteFault("방 확인", lookup.fault)
+                    noteFault("room-check", lookup.fault)
                     onDone?.invoke(lookup.fault, false)
                 }
                 is RoomLookup.Missing -> {
@@ -283,14 +283,14 @@ object PinSession {
                         onDone?.invoke(null, false)
                         return@fetchRoom
                     }
-                    SyncLog.record("방 확인", "rooms/$code 문서 없음 → 다시 만듭니다")
+                    SyncLog.record("room-check", "rooms/$code missing → recreate")
                     engine.ensureRoom(roomSeed(code)) { fault ->
                         if (fault == null) {
                             roomOnServer = true
                             roomRepaired = true
                             clearFault()
                         } else {
-                            noteFault("방 되살리기", fault)
+                            noteFault("room-repair", fault)
                         }
                         notifyChanged()
                         onDone?.invoke(fault, fault == null)
@@ -317,7 +317,7 @@ object PinSession {
     private fun noteFault(where: String, fault: SyncFault) {
         lastFault = fault
         lastFaultAt = where
-        SyncLog.record("실패 · $where", fault.logText)
+        SyncLog.record("fail · $where", fault.logText)
     }
 
     private fun clearFault() {
@@ -423,7 +423,7 @@ object PinSession {
                 clearFault()
                 notifyChanged()
             } else {
-                noteFault("약속", fault)
+                noteFault("meeting", fault)
             }
             onDone(fault)
         }
@@ -500,8 +500,8 @@ object PinSession {
         lastUploadAt = System.currentTimeMillis()
         engine.upload(roomCode, member) { fault ->
             if (fault != null && !demo) {
-                noteFault("멤버 올리기", fault)
-            } else if (fault == null && lastFaultAt == "멤버 올리기") {
+                noteFault("member-upload", fault)
+            } else if (fault == null && lastFaultAt == "member-upload") {
                 clearFault()
             }
             notifyChanged()
@@ -516,7 +516,7 @@ object PinSession {
             if (list != null) {
                 members = list.filter { it.id != prefs.deviceId }.sortedBy { it.name.lowercase() }
             } else if (fault != null && !demo) {
-                noteFault("멤버 받기", fault)
+                noteFault("member-poll", fault)
             }
             notifyChanged()
         }
@@ -529,7 +529,7 @@ object PinSession {
             when (lookup) {
                 is RoomLookup.Found -> meeting = lookup.room.meeting
                 is RoomLookup.Missing -> if (!demo) verifyRoom(recreate = true)
-                is RoomLookup.Failed -> if (!demo) noteFault("방 확인", lookup.fault)
+                is RoomLookup.Failed -> if (!demo) noteFault("room-check", lookup.fault)
             }
             notifyChanged()
         }
