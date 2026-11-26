@@ -204,4 +204,19 @@
     <string name="chat_failed">Could not send the message.</string>
     <string name="chat_card_desc">Chat with everyone in this room</string>
     <string name="chat_unread">%1$d new</string>
+    <!-- 방장 내보내기 (v1.0.7) -->
+    <string name="host_badge">Host</string>
+    <string name="kick_member">Remove</string>
+    <string name="kick_title">Remove a member</string>
+    <string name="kick_body">Remove %1$s from this room?</string>
+    <string name="kick_confirm">Remove</string>
+    <string name="toast_kicked">%1$s was removed from the room</string>
+    <string name="err_kick_failed">Couldn\'t remove the member. Try again.</string>
+    <string name="kicked_title">You left the room</string>
+    <string name="kicked_body">The host removed you from this room. Your location is no longer shared.</string>
+
+    <!-- 지도 아래 채팅창 (v1.0.7) -->
+    <string name="chat_collapse">Collapse</string>
+    <string name="chat_expand">Expand</string>
+    <string name="chat_open_full">Full screen</string>
 </resources>

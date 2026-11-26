@@ -371,6 +371,46 @@ object PinLogic {
             else -> SimpleDateFormat("yyyy.MM.dd", Locale.US).apply { timeZone = zone }.format(Date(dayMs))
         }
     }
+
+    // --------------------------------------------------------------- 방장·내보내기 (v1.0.7)
+
+    /** 한 방에서 내보낸 기기를 최대 몇 개까지 기억하는가 (보안 규칙의 kickedIds 한도와 같은 값) */
+    const val KICK_LIMIT = 20
+
+    /**
+     * 이 방의 방장 기기 ID.
+     *  - 새 방: `rooms/{code}` 의 `hostDeviceId`
+     *  - 옛 방(v1.0.6 까지 만든 방 — 필드가 없음): 그 방을 만든 기기만 방장으로 본다(`createdHere`).
+     *    방장이 아닌 사람에게는 "" 가 되므로, 방장을 모를 때 UI 는 아무에게도 내보내기 버튼을 보여 주지 않는다.
+     */
+    fun resolveHost(hostDeviceId: String?, myDeviceId: String, createdHere: Boolean): String {
+        val saved = hostDeviceId?.trim().orEmpty()
+        if (saved.isNotEmpty()) return saved
+        return if (createdHere) myDeviceId else ""
+    }
+
+    /** 지금 이 기기가 방장인가 */
+    fun isHost(hostDeviceId: String?, myDeviceId: String, createdHere: Boolean): Boolean {
+        val host = resolveHost(hostDeviceId, myDeviceId, createdHere)
+        return host.isNotEmpty() && host == myDeviceId
+    }
+
+    /**
+     * 내보낸 기기 목록에 대상을 더한다.
+     * 이미 있으면 뒤로 옮기고, [KICK_LIMIT] 개를 넘으면 오래된 것부터 버린다.
+     * (덮어쓰지 않고 **더하는** 함수 — 방장 폰 두 대가 동시에 내보내도 한 명이 풀리지 않게)
+     */
+    fun withKicked(existing: List<String>, target: String, limit: Int = KICK_LIMIT): List<String> {
+        val id = target.trim()
+        if (id.isEmpty()) return existing
+        val out = existing.filter { it.isNotBlank() && it != id }.toMutableList()
+        out.add(id)
+        return if (out.size > limit) out.takeLast(limit) else out
+    }
+
+    /** 이 기기가 방장에 의해 내보내졌는가 */
+    fun kickedOut(kicked: List<String>, deviceId: String): Boolean =
+        deviceId.isNotBlank() && kicked.any { it == deviceId }
 }
 
 /**
@@ -470,13 +510,17 @@ object FirestoreCodec {
         return 0L
     }
 
-    fun roomFields(code: String, owner: String, createdAt: Long, meeting: MeetingPoint?): FirestoreFields {
+    fun roomFields(code: String, owner: String, createdAt: Long, meeting: MeetingPoint?, hostDeviceId: String = ""): FirestoreFields {
         val base = mutableMapOf(
             "code" to mapOf<String, Any>("stringValue" to code),
             "owner" to mapOf<String, Any>("stringValue" to owner),
             "createdAt" to mapOf<String, Any>("timestampValue" to isoUtc(createdAt)),
             "active" to mapOf<String, Any>("booleanValue" to true)
         )
+        // v1.0.7 방장 — 방을 만든 기기의 ID. 옛 방처럼 모를 때는 필드를 넣지 않는다(레거시 호환)
+        if (hostDeviceId.isNotBlank()) {
+            base["hostDeviceId"] = mapOf("stringValue" to hostDeviceId.take(64))
+        }
         if (meeting != null) {
             base["meetingLat"] = mapOf("doubleValue" to meeting.lat)
             base["meetingLng"] = mapOf("doubleValue" to meeting.lng)
@@ -500,6 +544,21 @@ object FirestoreCodec {
     fun meetingMaskQuery(): String =
         meetingFieldPaths().joinToString("&") { "updateMask.fieldPaths=$it" }
 
+    /** 방장 등록(옛 방의 hostDeviceId 채우기)에 쓰는 마스크 — 다른 필드는 건드리지 않는다 */
+    fun hostMaskQuery(): String = "updateMask.fieldPaths=hostDeviceId"
+
+    /** 내보낸 목록만 바꾸는 마스크 */
+    fun kickMaskQuery(): String = "updateMask.fieldPaths=kickedIds"
+
+    /** 문자열 배열 필드 — Firestore 모양 `{"arrayValue":{"values":[{"stringValue":…}]}}` */
+    fun stringArray(values: List<String>): Map<String, Any> = mapOf("arrayValue" to values)
+
+    /** `kickedIds` 같은 문자열 배열 필드 읽기 */
+    fun strList(fields: FirestoreFields, key: String): List<String> {
+        val raw = fields[key]?.get("arrayValue") ?: return emptyList()
+        val list = raw as? List<*> ?: return emptyList()
+        return list.mapNotNull { (it as? String)?.takeIf { id -> id.isNotBlank() } }
+    }
     // ---------------------------------------------------------------- 읽기
 
     fun str(fields: FirestoreFields, key: String): String? =
@@ -597,7 +656,17 @@ object FirestoreCodec {
         "stringValue", "timestampValue", "integerValue" -> jsonString(raw.toString())
         "doubleValue" -> numberString((raw as Number).toDouble())
         "booleanValue" -> if (raw as Boolean) "true" else "false"
+        "arrayValue" -> arrayJson(raw)
         else -> jsonString(raw.toString())
+    }
+
+    /** 문자열 배열 → `{"values":[{"stringValue":"a"},…]}` */
+    private fun arrayJson(raw: Any): String {
+        val values = raw as? List<*> ?: return "{\"values\":[]}"
+        if (values.isEmpty()) return "{\"values\":[]}"
+        return values.joinToString(",", prefix = "{\"values\":[", postfix = "]}") {
+            "{\"stringValue\":" + jsonString(it?.toString().orEmpty()) + "}"
+        }
     }
 
     fun numberString(value: Double): String {

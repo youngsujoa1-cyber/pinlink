@@ -192,4 +192,19 @@
     <string name="chat_failed">메시지를 보내지 못했어요.</string>
     <string name="chat_card_desc">이 방 사람들과 대화하기</string>
     <string name="chat_unread">새 메시지 %1$d</string>
+    <!-- 방장 내보내기 (v1.0.7) -->
+    <string name="host_badge">방장</string>
+    <string name="kick_member">내보내기</string>
+    <string name="kick_title">멤버 내보내기</string>
+    <string name="kick_body">%1$s 님을 방에서 내보낼까요?</string>
+    <string name="kick_confirm">내보내기</string>
+    <string name="toast_kicked">%1$s 님을 내보냈어요</string>
+    <string name="err_kick_failed">내보내지 못했어요. 다시 시도해 주세요.</string>
+    <string name="kicked_title">방에서 나갔어요</string>
+    <string name="kicked_body">방장에 의해 방에서 나갔어요. 이제 내 위치는 공유되지 않아요.</string>
+
+    <!-- 지도 아래 채팅창 (v1.0.7) -->
+    <string name="chat_collapse">접기</string>
+    <string name="chat_expand">펼치기</string>
+    <string name="chat_open_full">크게 보기</string>
 </resources>

@@ -192,4 +192,19 @@
     <string name="chat_failed">消息发送失败。</string>
     <string name="chat_card_desc">与房间成员聊天</string>
     <string name="chat_unread">新消息 %1$d</string>
+    <!-- 房主移出成员 (v1.0.7) -->
+    <string name="host_badge">房主</string>
+    <string name="kick_member">移出</string>
+    <string name="kick_title">移出成员</string>
+    <string name="kick_body">要把 %1$s 移出这个房间吗？</string>
+    <string name="kick_confirm">移出</string>
+    <string name="toast_kicked">已将 %1$s 移出房间</string>
+    <string name="err_kick_failed">无法移出该成员，请重试。</string>
+    <string name="kicked_title">已离开房间</string>
+    <string name="kicked_body">房主已将你移出房间，位置不再共享。</string>
+
+    <!-- 地图下方聊天 (v1.0.7) -->
+    <string name="chat_collapse">收起</string>
+    <string name="chat_expand">展开</string>
+    <string name="chat_open_full">全屏</string>
 </resources>

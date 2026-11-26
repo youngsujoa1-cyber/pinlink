@@ -5,12 +5,14 @@ rules_version = '2';
 // 앱에는 로그인이 없다. 방 코드(6자리)를 아는 사람이 그 방의 멤버이고,
 // 그래서 읽기는 공개, 쓰기는 '모양'을 규칙으로 좁힌다(스팸·거대 문서 방지).
 //
-//   rooms/{code}                     code, owner, createdAt, active, meeting*(5)
+//   rooms/{code}                     code, owner, createdAt, active, meeting*(5), hostDeviceId, kickedIds
 //   rooms/{code}/members/{deviceId}  name, color, lat, lng, battery, sharing, speedKmh, staySince (정확히 8)
 //   rooms/{code}/messages/{msgId}    senderId, senderName, senderColor, text, createdAtMs (정확히 5)
 //
-// v1.0.6 에서 messages 를 추가했다. 메시지는 만들기만 되고 고치거나 지울 수 없다
-// (지우기를 허용하면 코드를 아는 누군가가 남의 대화를 통째로 지울 수 있다).
+// v1.0.6 에서 messages 를, v1.0.7 에서 방장의 멤버 내보내기(hostDeviceId·kickedIds)를 추가했다.
+// kickedIds 에 들어간 기기는 **멤버 문서를 다시 쓸 수 없다** — 내보내진 폰의 위치 공유 타이머가
+// 다음 주기에 자기 문서를 다시 올려도 규칙이 403 으로 막으므로 방에 재등장하지 않는다.
+// 메시지는 만들기만 되고 고치거나 지울 수 없다(지우기를 허용하면 코드를 아는 누군가가 남의 대화를 통째로 지울 수 있다).
 //
 // 주의: Firebase 콘솔 규칙 편집기는 이 파일을 한 줄로 저장하고 '//' 주석을 먹는다.
 // 콘솔에 올리는 본문은 firestore.rules.oneline (python3 tools/rules-oneline.py 로 생성).
@@ -21,26 +23,41 @@ service cloud.firestore {
       return c is string && c.matches('^[A-Z0-9]{6}$');
     }
 
+    // v1.0.7 — 방장이 내보낸 기기인가?
+    //   · 방 문서가 없으면 false (이전 버전처럼 멤버 문서 쓰기는 그대로 통과 — 하위 컬렉션은 부모 문서가 없어도 쓸 수 있었다)
+    //   · kickedIds 필드가 없는 옛 방(레거시)에서도 오류 없이 false
+    function kicked(c, d) {
+      return exists(/databases/$(database)/documents/rooms/$(c))
+        && ('kickedIds' in get(/databases/$(database)/documents/rooms/$(c)).data)
+        && (d in get(/databases/$(database)/documents/rooms/$(c)).data.kickedIds);
+    }
+
     match /rooms/{code} {
       allow read: if true;
-      allow create, update: if okCode(code) && request.resource.data.size() <= 14
+      allow create, update: if okCode(code) && request.resource.data.size() <= 16
         && request.resource.data.code == code
         && (!request.resource.data.keys().hasAny(['owner'])
             || (request.resource.data.owner is string && request.resource.data.owner.size() <= 40))
         && (!request.resource.data.keys().hasAny(['meetingName'])
             || (request.resource.data.meetingName is string && request.resource.data.meetingName.size() <= 60))
         && (!request.resource.data.keys().hasAny(['meetingBy'])
-            || (request.resource.data.meetingBy is string && request.resource.data.meetingBy.size() <= 40));
+            || (request.resource.data.meetingBy is string && request.resource.data.meetingBy.size() <= 40))
+        && (!request.resource.data.keys().hasAny(['hostDeviceId'])
+            || (request.resource.data.hostDeviceId is string && request.resource.data.hostDeviceId.size() <= 64))
+        && (!request.resource.data.keys().hasAny(['kickedIds'])
+            || (request.resource.data.kickedIds is list && request.resource.data.kickedIds.size() <= 20));
       allow delete: if false;   // 방 문서는 앱에서 지우지 않는다(남용 방지)
 
       match /members/{deviceId} {
         allow read: if true;
+        // v1.0.7 — 방장이 내보낸 기기는 자기 멤버 문서를 다시 만들 수 없다(재입장 차단)
         allow create, update: if okCode(code) && request.resource.data.size() <= 8
+          && !kicked(code, deviceId)
           && request.resource.data.lat is number && request.resource.data.lat >= -90 && request.resource.data.lat <= 90
           && request.resource.data.lng is number && request.resource.data.lng >= -180 && request.resource.data.lng <= 180
           && (!request.resource.data.keys().hasAny(['name'])
               || (request.resource.data.name is string && request.resource.data.name.size() <= 40));
-        allow delete: if true;  // 나가기
+        allow delete: if true;  // 나가기 · 방장의 내보내기(멤버 문서 정리)
       }
 
       // v1.0.6 방 채팅
@@ -53,6 +70,7 @@ service cloud.firestore {
           && request.resource.data.text is string
           && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500
           && request.resource.data.createdAtMs is int && request.resource.data.createdAtMs > 0
+          && !kicked(code, request.resource.data.senderId)
           && (!request.resource.data.keys().hasAny(['senderName'])
               || (request.resource.data.senderName is string && request.resource.data.senderName.size() <= 40))
           && (!request.resource.data.keys().hasAny(['senderColor'])

@@ -334,6 +334,9 @@ class RoomScreen(private val host: MainActivity) {
             append(PinSession.meeting?.let { "${it.name}${it.by}" } ?: "-")
             append('|')
             append(if (sharing) "1" else "0")
+            // 방장·내보내기 권한이 정해지면 배지와 버튼을 다시 그린다 (v1.0.7)
+            append('|').append(PinSession.hostIdResolved)
+            append(if (PinSession.isHost) "·host" else "")
         }
         if (newSignature != signature) {
             signature = newSignature
@@ -383,12 +386,16 @@ class RoomScreen(private val host: MainActivity) {
     private fun rebuildMembers(now: Long) {
         membersBox.removeAllViews()
 
+        val hostId = PinSession.hostIdResolved
+        val amHost = PinSession.isHost
+
         // 나
         val me = memberRow(
             name = PinSession.myName,
             color = PinSession.myColor,
             meta = myMetaLine(now),
-            trailing = act.getString(if (PinSession.isSharingNow()) R.string.sharing_live else R.string.sharing_paused)
+            trailing = act.getString(if (PinSession.isSharingNow()) R.string.sharing_live else R.string.sharing_paused),
+            host = hostId.isNotEmpty() && hostId == pinDeviceId()
         )
         me.tag = "__me__"
         membersBox.addView(me, LinearLayout.LayoutParams(
@@ -412,6 +419,13 @@ class RoomScreen(private val host: MainActivity) {
                     speed > 0 -> act.getString(R.string.speed_kmh, speed)
                     member.staySince > 0L -> stayText(act, member.staySince, now, short = true)
                     else -> act.getString(R.string.state_stopped)
+                },
+                host = hostId.isNotEmpty() && member.id == hostId,
+                // 방장일 때만, 그리고 내 행이 아닌 사람에게만 내보내기 버튼
+                onKick = if (amHost) {
+                    { host.confirmKickMember(member) }
+                } else {
+                    null
                 }
             )
             row.tag = member.id
@@ -430,7 +444,14 @@ class RoomScreen(private val host: MainActivity) {
         }
     }
 
-    private fun memberRow(name: String, color: String, meta: String, trailing: String): LinearLayout {
+    private fun memberRow(
+        name: String,
+        color: String,
+        meta: String,
+        trailing: String,
+        host: Boolean = false,
+        onKick: (() -> Unit)? = null
+    ): LinearLayout {
         val row = Ui.row(act)
         val avatar = Ui.text(act, name.trim().firstOrNull()?.toString()?.uppercase() ?: "?", 13f, Color.parseColor("#0B0F19"), bold = true).apply {
             gravity = Gravity.CENTER
@@ -442,7 +463,18 @@ class RoomScreen(private val host: MainActivity) {
         row.addView(avatar, LinearLayout.LayoutParams(act.dp(34f), act.dp(34f)).apply { rightMargin = act.dp(11f) })
 
         val texts = Ui.column(act)
-        texts.addView(Ui.text(act, name, 13.5f, act.getColor(R.color.text_primary), bold = true))
+        val nameLine = Ui.row(act)
+        nameLine.addView(Ui.text(act, name, 13.5f, act.getColor(R.color.text_primary), bold = true))
+        if (host) {
+            // v1.0.7 — 방장에게만 붙는 작은 배지 (6개 언어)
+            nameLine.addView(
+                Ui.pill(act, act.getString(R.string.host_badge), act.getColor(R.color.accent_dim), act.getColor(R.color.accent), 9f),
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { leftMargin = act.dp(6f) }
+            )
+        }
+        texts.addView(nameLine)
         texts.addView(
             Ui.text(act, meta, 11f, act.getColor(R.color.text_secondary)).apply { tag = "meta" },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -451,8 +483,29 @@ class RoomScreen(private val host: MainActivity) {
         )
         row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT).apply { weight = 1f })
         row.addView(Ui.text(act, trailing, 10.5f, act.getColor(R.color.text_tertiary), bold = true))
+        if (onKick != null) {
+            row.addView(kickButton(onKick), LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { leftMargin = act.dp(8f) })
+        }
         return row
     }
+
+    /** 방장 전용 — 멤버를 방에서 내보내는 작은 버튼 (누르면 확인 창) */
+    private fun kickButton(onClick: () -> Unit): LinearLayout = Ui.row(act).apply {
+        background = Ui.rounded(act, act.getColor(R.color.danger_dim), 12f, ripple = true)
+        setPadding(act.dp(9f), act.dp(5f), act.dp(9f), act.dp(5f))
+        addView(
+            Ui.icon(act, R.drawable.ic_exit, 12f, act.getColor(R.color.danger)),
+            LinearLayout.LayoutParams(act.dp(12f), act.dp(12f)).apply { rightMargin = act.dp(4f) }
+        )
+        addView(Ui.text(act, act.getString(R.string.kick_member), 10.5f, act.getColor(R.color.danger), bold = true))
+        contentDescription = act.getString(R.string.kick_member)
+        Ui.clickable(this) { onClick() }
+    }
+
+    /** 내 기기 ID — '나' 행에 방장 배지를 붙일지 판단할 때만 쓴다 */
+    private fun pinDeviceId(): String = com.youngsu.pinlink.data.AppPrefs.get(act).deviceId
 
     private fun rebuildMeeting() {
         val meeting = PinSession.meeting

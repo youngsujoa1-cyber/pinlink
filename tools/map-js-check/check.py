@@ -5,6 +5,10 @@
 `PinLink.setMembers` / `setMy` / `setMeeting` / `moveTo` / `setDark` / `setPick` / `setFollow`
 를 호출해 마커 HTML·좌표·콜백이 기대대로 만들어지는지 본다.
 
+  setMembers 는 앱이 실제로 넘기는 배열 인자(`PinLink.setMembers([{...}])`)로도 검사한다.
+  v1.0.6 은 문자열만 받는다고 가정해 배열이 들어오면 JSON.parse 에서 SyntaxError 가 나
+  멤버 핀이 하나도 그려지지 않았다(네이버 지도 실기기 버그).
+
 사용:
   pip install dukpy
   python3 tools/map-js-check/check.py
@@ -53,12 +57,25 @@ var window = { naver: naver, document: document, navigator: navigator,
     onLongPress:function(a,b){logs.push('long:'+a+','+b);}, onFollowChanged:function(f){logs.push('follow:'+f);} },
   addEventListener: function(){} };
 function fire(ev, arg){ for (var i=0;i<listeners.length;i++){ if (listeners[i].ev===ev) listeners[i].fn(arg); } }
+function liveMarkers(){ var n = 0; for (var i=0;i<markers.length;i++){ if (!markers[i].removed) n++; } return n; }
+// 마커가 없을 때도 예외 대신 빈 값 — 실패가 FAIL 로 보이게
+function icon(i){ return (markers[i] && markers[i].o && markers[i].o.icon) ? markers[i].o.icon.content : ''; }
+function anchor(i){ return (markers[i] && markers[i].o && markers[i].o.icon && markers[i].o.icon.anchor) ? (markers[i].o.icon.anchor.x + ',' + markers[i].o.icon.anchor.y) : 'none'; }
 """
 
 
 def payload(items):
-    """앱이 JS 로 넘기는 것과 같은 'JSON 문자열' 리터럴"""
+    """예전 방식 — 멤버 목록을 'JSON 문자열' 로 감싸 넘기는 리터럴"""
     return json.dumps(json.dumps(items, ensure_ascii=True))
+
+
+def array_literal(items):
+    """**앱이 실제로 넘기는 모양** — NaverMapView.pushMembers 는 배열 리터럴을 그대로 넣는다.
+
+    `PinLink.setMembers([{...},{...}])`. v1.0.6 까지 setMembers 가 무조건 JSON.parse 를 불러
+    이 배열이 "[object Object]" 가 되면서 SyntaxError → 멤버 핀이 하나도 안 보였다.
+    """
+    return json.dumps(items, ensure_ascii=True)
 
 
 def main():
@@ -82,6 +99,14 @@ def main():
     one = payload([
         {"id": "a1", "name": "\uc601\uc218", "color": "#2BD9A6", "lat": 37.6, "lng": 127.1, "alpha": 1, "selected": True},
     ])
+    # 앱이 넘기는 그대로 — 문자열이 아닌 배열
+    live_two = array_literal([
+        {"id": "h3", "name": "\uad6c\ud615\ud3f0", "color": "#6FE3FF", "lat": 37.35, "lng": 127.12, "alpha": 1, "selected": False},
+        {"id": "h4", "name": "Ddd", "color": "#B9A7FF", "lat": 37.36, "lng": 127.13, "alpha": 0.7, "selected": True},
+    ])
+    live_one = array_literal([
+        {"id": "h3", "name": "\uad6c\ud615\ud3f0", "color": "#6FE3FF", "lat": 37.37, "lng": 127.14, "alpha": 1, "selected": False},
+    ])
 
     body = """
 var r = {};
@@ -100,6 +125,18 @@ P.setFollow(false); P.setMy(37.9, 127.9); r.followOffLat = mapInstance.getCenter
 P.setMembers(""" + one + """);
 r.afterUpdate = markers.length; r.reused = markers[0].o.icon.content.indexOf('pinwrap sel') >= 0; r.removed = markers[1].removed === true;
 P.clearMeeting(); P.clearMy(); r.afterClear = markers.length;
+
+// --- 앱이 실제로 넘기는 모양(배열 인자)으로 멤버 핀이 그려지는지 (v1.0.7 회귀 검사)
+P.setMembers(""" + live_two + """);
+r.arrCount = liveMarkers(); r.arr0 = icon(4); r.arr1 = icon(5);
+r.arrAnchor = anchor(4);
+r.arrName = r.arr0.indexOf('\uad6c\ud615\ud3f0') >= 0;
+r.arrSelected = r.arr1.indexOf('pinwrap sel') >= 0;
+P.setMembers(""" + live_one + """); r.arrUpdate = liveMarkers(); r.arrRemoved = !!(markers[5] && markers[5].removed);
+// 이상한 입력(문자열 "[object Object]", null)에도 예외 없이 빈 목록으로 처리
+P.setMembers('[object Object]'); r.junk = liveMarkers();
+P.setMembers(null); r.nullArg = liveMarkers();
+
 fire('idle'); r.centerCount = logs.join('|').split('center:').length - 1;
 JSON.stringify(r);
 """
@@ -132,6 +169,13 @@ JSON.stringify(r);
         ("선택만 바뀌면 제자리 갱신", r["reused"] is True),
         ("빠진 멤버는 지도에서 제거", r["removed"] is True),
         ("clear 후 마커 배열 유지", r["afterClear"] == 4),
+        ("배열 인자로 넘긴 멤버 핀 2개 생성 (v1.0.6 버그)", r["arrCount"] == 2),
+        ("배열 인자 핀 이름표", r["arrName"] is True and "pinwrap" in r["arr0"]),
+        ("배열 인자 핀 기준점(0,0)", r["arrAnchor"] == "0,0"),
+        ("배열 인자 선택 링", r["arrSelected"] is True),
+        ("배열 인자로 갱신·제거", r["arrUpdate"] == 1 and r.get("arrRemoved") is True),
+        ("이상한 문자열 인자는 빈 목록", r["junk"] == 0),
+        ("null 인자는 빈 목록", r["nullArg"] == 0),
         ("idle 때 중심 다시 보고", r["centerCount"] == 2),
     ]
 

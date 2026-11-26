@@ -342,13 +342,23 @@
     setTimeout(function () { if (!ready) fail('idle-timeout'); }, 7000);
   }
 
-  // 브리지에서 부르는 API — 문자열 하나만 넘겨 JSON 은 여기서 푼다
+  // 브리지에서 부르는 API — 멤버 목록은 **배열 그대로** 올 수도, JSON 문자열로 올 수도 있다.
+  //
+  // v1.0.6 까지는 무조건 JSON.parse(json) 을 먼저 불렀는데, 앱(NaverMapView.pushMembers)이
+  // `PinLink.setMembers([{...}])` 처럼 배열 리터럴을 그대로 넘기고 있어서
+  // JSON.parse(배열) → 배열이 문자열 "[object Object]" 로 바뀌며 SyntaxError → list=[] 가 되었고,
+  // **네이버 지도에서 다른 멤버 핀이 하나도 그려지지 않았다**(내 위치 점만 보임).
+  // 이제는 배열이면 그대로 쓰고, 문자열일 때만 푼다.
   window.PinLink = {
     setMembers: function (json) {
       var list = [];
-      try { list = JSON.parse(json); } catch (e) { list = []; }
-      if (typeof list === 'string') { try { list = JSON.parse(list); } catch (e) { list = []; } }
-      if (!(list instanceof Array)) list = [];
+      if (Array.isArray(json)) {
+        list = json;
+      } else if (typeof json === 'string') {
+        try { list = JSON.parse(json); } catch (e) { list = []; }
+        if (typeof list === 'string') { try { list = JSON.parse(list); } catch (e) { list = []; } }
+      }
+      if (!Array.isArray(list)) list = [];
       run(function () { applyMembers(list); });
     },
     setMy: function (lat, lng) { run(function () { applyMy(lat, lng); }); },

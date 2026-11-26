@@ -40,7 +40,12 @@ class MapScreen(private val host: MainActivity) {
     val view: FrameLayout = FrameLayout(act)
 
     private val lobby: View = buildLobby()
-    private val live: FrameLayout = FrameLayout(act)
+    /** 지도 + 그 위에 얹는 칩들 + 아래 채팅창을 세로로 쌓는 그릇 */
+    private val live: LinearLayout = Ui.column(act)
+    /** 지도와 그 위 오버레이(칩·멤버 카드·약속 고르기 바)만 담는 영역 */
+    private val mapArea: FrameLayout = FrameLayout(act)
+    /** 지도 아래에 붙는 방 채팅창 (v1.0.7) */
+    private val chatPanel: MapChatPanel = MapChatPanel(host)
 
     private val map: HybridMapView = HybridMapView(act)
     private val topBar: LinearLayout = Ui.column(act)
@@ -82,7 +87,14 @@ class MapScreen(private val host: MainActivity) {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
         ))
 
-        live.addView(map, FrameLayout.LayoutParams(
+        // 세로: 지도 영역(weight 1) → 채팅창(고정 높이). 작은 화면에서도 지도·탭·배너가 함께 보인다
+        mapArea.tag = "map-area"
+        live.addView(mapArea, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0
+        ).apply { weight = 1f })
+        live.addView(chatPanel.view)
+
+        mapArea.addView(map, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
         ))
         map.onMemberTap = { member -> select(member) }
@@ -107,7 +119,7 @@ class MapScreen(private val host: MainActivity) {
             visibility = if (PinSession.demo) View.VISIBLE else View.GONE
         }
         topBar.setPadding(act.dp(12f), act.dp(14f), act.dp(12f), 0)
-        live.addView(topBar, FrameLayout.LayoutParams(
+        mapArea.addView(topBar, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { gravity = Gravity.TOP })
         topBar.addView(demoBanner, LinearLayout.LayoutParams(
@@ -227,7 +239,7 @@ class MapScreen(private val host: MainActivity) {
         bottomBar = Ui.column(act).apply {
             setPadding(act.dp(12f), 0, act.dp(12f), act.dp(14f))
         }
-        live.addView(bottomBar, FrameLayout.LayoutParams(
+        mapArea.addView(bottomBar, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { gravity = Gravity.BOTTOM })
 
@@ -286,7 +298,7 @@ class MapScreen(private val host: MainActivity) {
         actionsRow.addView(recenter, LinearLayout.LayoutParams(act.dp(46f), act.dp(46f)))
 
         emptyHint = Ui.pill(act, act.getString(R.string.map_no_fix), act.getColor(R.color.glass_strong), act.getColor(R.color.platinum), 11f)
-        live.addView(emptyHint, FrameLayout.LayoutParams(
+        mapArea.addView(emptyHint, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply {
             gravity = Gravity.CENTER
@@ -299,7 +311,7 @@ class MapScreen(private val host: MainActivity) {
             setPadding(act.dp(12f), act.dp(8f), act.dp(12f), act.dp(8f))
             visibility = View.GONE
         }
-        live.addView(pickHint, FrameLayout.LayoutParams(
+        mapArea.addView(pickHint, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
@@ -310,7 +322,7 @@ class MapScreen(private val host: MainActivity) {
             setPadding(act.dp(12f), 0, act.dp(12f), act.dp(16f))
             visibility = View.GONE
         }
-        live.addView(pickBar, FrameLayout.LayoutParams(
+        mapArea.addView(pickBar, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { gravity = Gravity.BOTTOM })
 
@@ -334,6 +346,9 @@ class MapScreen(private val host: MainActivity) {
         val hasRoom = PinSession.hasRoom()
         lobby.visibility = if (hasRoom) View.GONE else View.VISIBLE
         live.visibility = if (hasRoom) View.VISIBLE else View.GONE
+        // 지도 아래 채팅창 — 방이 있고 약속 장소를 고르는 중이 아닐 때만 자리를 차지한다
+        chatPanel.allowed = hasRoom && !pickMode
+        chatPanel.refresh()
         if (!hasRoom) return
 
         val now = System.currentTimeMillis()
@@ -546,6 +561,9 @@ class MapScreen(private val host: MainActivity) {
         actionsRow.visibility = View.GONE
         memberCard.visibility = View.GONE
         topBar.visibility = View.GONE
+        // 약속 장소를 고르는 동안에는 지도를 넓게 쓰도록 아래 채팅창을 접어 둔다
+        chatPanel.allowed = false
+        chatPanel.refresh()
         if (PinSession.meeting != null) {
             map.animateTo(PinSession.meeting!!.lat, PinSession.meeting!!.lng, 16f)
         }
@@ -558,6 +576,7 @@ class MapScreen(private val host: MainActivity) {
         pickBar.visibility = View.GONE
         actionsRow.visibility = View.VISIBLE
         topBar.visibility = View.VISIBLE
+        chatPanel.allowed = true
         refresh()
     }
 

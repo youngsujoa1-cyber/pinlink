@@ -40,6 +40,8 @@ object PinSession {
     private const val CHAT_POLL_MS = 3_000L
     /** 채팅 창을 닫아 두었을 때 — 읽지 않은 메시지 배지만 갱신 (내용은 새 메시지가 있을 때만 받아 온다) */
     private const val CHAT_IDLE_POLL_MS = 20_000L
+    /** 위치를 숨겨 둔 동안에도 방장이 나를 내보냈는지 확인하는 주기 (v1.0.7) */
+    private const val ROOM_IDLE_CHECK_MS = 20_000L
 
     private lateinit var app: Context
     private val main = Handler(Looper.getMainLooper())
@@ -53,6 +55,20 @@ object PinSession {
 
     @Volatile var roomOwner: Boolean = false
         private set
+
+    /** 방장 기기 ID — 서버 방 문서의 hostDeviceId (옛 방은 "", 방장을 모르면 "") */
+    @Volatile var roomHostId: String = ""
+        private set
+
+    /** 방장이 내보낸 기기 ID 목록 — 내가 들어 있으면 즉시 공유를 멈추고 나간다 */
+    @Volatile var kickedIds: List<String> = emptyList()
+        private set
+
+    /** 방장에 의해 내보내졌다는 안내를 한 번만 보여 주려고 남겨 두는 표시 */
+    @Volatile private var kickedNotice = false
+
+    /** 옛 방의 방장 등록을 이번 실행에서 이미 시도했는가 */
+    private var hostClaimed = false
 
     @Volatile var members: List<Member> = emptyList()
         private set
@@ -75,6 +91,10 @@ object PinSession {
 
     /** 채팅 창이 화면에 떠 있는가 — 떠 있을 때는 3초마다 확인하고 바로 읽음으로 친다 */
     @Volatile var chatOpen: Boolean = false
+        private set
+
+    /** 지도 아래 인라인 채팅창이 펼쳐져 있는가 (v1.0.7) — 이것도 '대화를 보고 있다'로 본다 */
+    @Volatile var inlineChatOpen: Boolean = false
         private set
 
     @Volatile private var topChatId = ""
@@ -110,6 +130,7 @@ object PinSession {
 
     @Volatile private var lastUploadAt = 0L
     @Volatile private var lastPollAt = 0L
+    @Volatile private var lastRoomAt = 0L
     @Volatile private var pollCounter = 0
     @Volatile private var reportedHidden = false
     @Volatile private var serviceRunning = false
@@ -226,7 +247,8 @@ object PinSession {
                 }
                 is RoomLookup.Missing -> {
                     val createdAt = System.currentTimeMillis()
-                    engine.createRoom(code, myName, createdAt) { fault ->
+                    // 방을 만든 기기가 곧 방장 — hostDeviceId 로 남겨 다른 멤버를 내보낼 수 있게 한다
+                    engine.createRoom(code, myName, prefs.deviceId, createdAt) { fault ->
                         if (fault == null) {
                             enterRoom(code, owner = true, startSharing = startSharing, createdAt = createdAt)
                         } else {
@@ -263,8 +285,9 @@ object PinSession {
                         notifyChanged()
                         onDone(false, "notfound")
                     } else {
-                        // 데모: 서버가 없으니 들어가려는 코드를 그 자리에서 데모 방으로 연다
-                        engine.createRoom(code, "demo", System.currentTimeMillis()) { }
+                        // 데모: 서버가 없으니 들어가려는 코드를 그 자리에서 데모 방으로 연다.
+                        // 방장 내보내기를 직접 해 볼 수 있게 이 기기를 방장으로 둔다
+                        engine.createRoom(code, "demo", prefs.deviceId, System.currentTimeMillis()) { }
                         enterRoom(code, owner = false, startSharing = startSharing)
                         busy = false
                         notifyChanged()
@@ -273,7 +296,7 @@ object PinSession {
                 }
                 is RoomLookup.Found -> {
                     enterRoom(code, owner = false, startSharing = startSharing, createdAt = lookup.room.createdAt)
-                    meeting = lookup.room.meeting
+                    applyRoomInfo(lookup.room)
                     busy = false
                     notifyChanged()
                     onDone(true, null)
@@ -294,6 +317,7 @@ object PinSession {
                 is RoomLookup.Found -> {
                     roomOnServer = true
                     clearFault()
+                    applyRoomInfo(lookup.room)
                     onDone?.invoke(null, false)
                 }
                 is RoomLookup.Failed -> {
@@ -335,7 +359,9 @@ object PinSession {
         val createdAt = prefs.roomCreatedAt.takeIf { it > 0L }
             ?: prefs.startedAt.takeIf { it > 0L }
             ?: System.currentTimeMillis()
-        return RoomSeed(code, prefs.nickname.ifBlank { myName }, createdAt)
+        // 방을 되살릴 때 방장 정보도 함께 살린다 — 모르면 옛 방을 만든 기기만 방장으로 둔다
+        val host = roomHostId.ifBlank { if (prefs.roomOwner) prefs.deviceId else "" }
+        return RoomSeed(code, prefs.nickname.ifBlank { myName }, createdAt, host)
     }
 
     private fun noteFault(where: String, fault: SyncFault) {
@@ -381,13 +407,23 @@ object PinSession {
             engine.leave(code, prefs.deviceId)
             stopService()
         }
+        resetRoom()
+        onDone?.invoke()
+    }
+
+    /** 방을 떠난 뒤의 기억을 모두 지운다 (나가기·내보내짐이 같은 경로를 쓴다) */
+    private fun resetRoom() {
         roomCode = ""
         roomOwner = false
+        roomHostId = ""
+        kickedIds = emptyList()
+        hostClaimed = false
         members = emptyList()
         meeting = null
         messages = emptyList()
         chatUnread = 0
         chatOpen = false
+        inlineChatOpen = false
         topChatId = ""
         lastReadMs = 0L
         mySpeedKmh = 0.0
@@ -398,8 +434,101 @@ object PinSession {
         prefs.clearRoom()
         applyLocation()
         notifyChanged()
-        onDone?.invoke()
     }
+
+    // ------------------------------------------------------- 방장·내보내기 (v1.0.7)
+
+    /** 이 방의 방장 기기 ID (모르면 "") */
+    val hostIdResolved: String
+        get() = PinLogic.resolveHost(roomHostId, prefs.deviceId, prefs.roomOwner)
+
+    /** 지금 이 기기가 방장인가 — 내보내기 버튼은 이때만 보인다 */
+    val isHost: Boolean get() = PinLogic.isHost(roomHostId, prefs.deviceId, prefs.roomOwner)
+
+    /** 방 문서에서 받은 방장·내보낸 목록을 반영하고, 내가 내보내졌으면 즉시 나간다 */
+    private fun applyRoomInfo(room: RoomInfo) {
+        if (room.code != roomCode) return
+        meeting = room.meeting
+        roomHostId = room.hostId
+        kickedIds = room.kicked
+        // 1) 내가 내보내졌다 — 위치 공유를 멈추고 방에서 나간다 (다음 폴링에서 또 나가지 않게 먼저 확인)
+        if (PinLogic.kickedOut(room.kicked, prefs.deviceId)) {
+            onKickedOut()
+            return
+        }
+        // 2) 옛 방(hostDeviceId 없음)을 만든 기기라면 이 기기를 방장으로 한 번 등록한다
+        if (room.hostId.isBlank() && prefs.roomOwner && !hostClaimed && roomCode.isNotEmpty()) {
+            hostClaimed = true
+            val code = roomCode
+            engine.claimHost(code, prefs.deviceId) { fault ->
+                if (fault == null) {
+                    roomHostId = prefs.deviceId
+                    SyncLog.record("host-claim", "rooms/$code")
+                    notifyChanged()
+                } else {
+                    noteFault("host-claim", fault)
+                }
+            }
+        }
+    }
+
+    /**
+     * 방장이 멤버를 내보낸다.
+     * 서버에는 내보낸 목록(kickedIds)을 먼저 올리고 멤버 문서를 지우므로,
+     * 상대 폰이 내보내진 뒤에 자기 위치를 다시 올리려 해도 보안 규칙이 막는다.
+     */
+    fun kickMember(target: Member, onDone: (SyncFault?) -> Unit) {
+        val code = roomCode
+        if (code.isEmpty() || target.id == prefs.deviceId) {
+            onDone(null)
+            return
+        }
+        if (!isHost) {
+            // 화면에는 방장에게만 버튼이 보이지만, 권한을 한 번 더 확인한다
+            onDone(SyncFault(SyncFailure.DENIED, 403, "not host"))
+            return
+        }
+        if (busy) return
+        busy = true
+        engine.kick(code, target.id) { fault ->
+            busy = false
+            if (fault == null) {
+                members = members.filterNot { it.id == target.id }
+                kickedIds = PinLogic.withKicked(kickedIds, target.id)
+                clearFault()
+                SyncLog.record("kick", "rooms/$code · ${target.name}")
+            } else {
+                noteFault("kick", fault)
+            }
+            notifyChanged()
+            onDone(fault)
+        }
+    }
+
+    /**
+     * 내가 방장에 의해 내보내졌을 때 — 위치 공유를 멈추고 방에서 나간다.
+     * 안내는 화면이 떠 있을 때 한 번 보여 준다([consumeKickedNotice]).
+     */
+    private fun onKickedOut() {
+        val code = roomCode
+        SyncLog.record("kicked", "rooms/$code → leave")
+        if (code.isNotEmpty()) {
+            engine.leave(code, prefs.deviceId)
+            stopService()
+        }
+        kickedNotice = true
+        resetRoom()
+    }
+
+    /** 내보내졌다는 안내를 한 번만 가져간다 (화면이 띄운다) */
+    fun consumeKickedNotice(): Boolean {
+        val noticed = kickedNotice
+        kickedNotice = false
+        return noticed
+    }
+
+    /** 화면이 지금 보이는가 — 보이지 않으면 읽음 처리·알림을 하지 않는다 */
+    val uiVisibleNow: Boolean get() = uiVisible
 
     // ------------------------------------------------------------- 공유 모드 변경
 
@@ -594,13 +723,31 @@ object PinSession {
         val merged = PinLogic.mergeChat(messages, mine)
         messages = merged
         topChatId = merged.lastOrNull()?.id ?: topChatId
-        if (chatOpen) {
+        if (chatOpen || inlineChatOpen) {
             lastReadMs = maxOf(lastReadMs, merged.maxOfOrNull { it.createdAtMs } ?: 0L)
             chatUnread = 0
         } else {
             chatUnread = PinLogic.unreadCount(merged, lastReadMs, prefs.deviceId)
         }
         notifyChanged()
+    }
+
+    /**
+     * 지도 아래 인라인 채팅창을 펼쳤다/접었다 (v1.0.7).
+     * 펼쳐져 있는 동안에는 새 메시지를 바로 읽음으로 치고, 채팅 탭 배지도 같이 줄어든다.
+     */
+    fun setInlineChatOpen(open: Boolean) {
+        if (inlineChatOpen == open) return
+        inlineChatOpen = open
+        if (open) markChatSeen()
+        notifyChanged()
+    }
+
+    /** 지금 보이는 대화까지를 읽음으로 친다 (배지에서 뺀다) */
+    fun markChatSeen() {
+        val latest = messages.maxOfOrNull { it.createdAtMs } ?: return
+        if (latest > lastReadMs) lastReadMs = latest
+        if (chatUnread != 0) chatUnread = 0
     }
 
     /** 채팅 창을 열었다 — 지금까지 받은 메시지는 읽은 것으로 친다 */
@@ -662,12 +809,32 @@ object PinSession {
         notifyChanged()
     }
 
+    /**
+     * 화면 검사 도구가 방장·멤버 목록을 채워 넣을 때만 쓰는 통로.
+     * 앱 코드는 언제나 서버·DemoEngine 에서 받은 값을 쓴다.
+     */
+    /**
+     * 방 문서에서 받은 것과 같은 정보를 화면 검사에서 직접 넣어 본다
+     * (내보내짐 감지 → 즉시 공유 중지·퇴장까지 확인하려고).
+     */
+    @androidx.annotation.VisibleForTesting
+    fun applyRoomForTest(room: RoomInfo) = applyRoomInfo(room)
+
+    @androidx.annotation.VisibleForTesting
+    fun previewRoomForTest(hostId: String, others: List<Member>, kicked: List<String> = emptyList()) {
+        roomHostId = hostId
+        kickedIds = kicked
+        members = others.filter { it.id != prefs.deviceId }.sortedBy { it.name.lowercase() }
+        notifyChanged()
+    }
+
     /** 방 문서에서 약속 장소를 받는다 (다른 멤버가 찍었을 수 있다) */
     fun refreshRoom() {
         if (roomCode.isEmpty()) return
+        lastRoomAt = System.currentTimeMillis()
         engine.fetchRoom(roomCode) { lookup ->
             when (lookup) {
-                is RoomLookup.Found -> meeting = lookup.room.meeting
+                is RoomLookup.Found -> applyRoomInfo(lookup.room)
                 is RoomLookup.Missing -> if (!demo) verifyRoom(recreate = true)
                 is RoomLookup.Failed -> if (!demo) noteFault("room-check", lookup.fault)
             }
@@ -795,6 +962,10 @@ object PinSession {
                 pollCounter++
                 if (pollCounter % ROOM_POLL_EVERY == 0) refreshRoom()
             }
+        } else if (now - lastRoomAt >= ROOM_IDLE_CHECK_MS) {
+            // 위치를 숨겨 둔 동안에도 방 문서를 가끔 확인한다 —
+            // 방장이 내보냈는데 공유가 멈춰 있어서 영영 모르는 일이 없게
+            refreshRoom()
         }
         // 채팅은 위치 공유와 별개다 — 위치를 숨겨도 대화는 계속된다
         val chatEvery = if (chatOpen) CHAT_POLL_MS else CHAT_IDLE_POLL_MS

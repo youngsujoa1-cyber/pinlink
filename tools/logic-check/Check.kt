@@ -1,5 +1,6 @@
 import com.youngsu.pinlink.core.ChatMessage
 import com.youngsu.pinlink.core.FirestoreCodec
+import com.youngsu.pinlink.core.FirestoreFields
 import com.youngsu.pinlink.core.Fix
 import com.youngsu.pinlink.core.MeetingPoint
 import com.youngsu.pinlink.core.Member
@@ -60,6 +61,7 @@ fun main() {
     speedChecks()
     stayChecks()
     chatChecks()
+    hostChecks()
     codecChecks()
     regionChecks()
 
@@ -523,4 +525,68 @@ fun chatChecks() {
             "text" to mapOf("stringValue" to "옛 문서"),
             "createdAt" to mapOf("timestampValue" to FirestoreCodec.isoUtc(now))
         ), "id")?.createdAtMs, now - 911L)   // ISO 는 초 단위까지만 담는다
+}
+
+// ------------------------------------------------------- 방장·내보내기 (v1.0.7)
+
+fun hostChecks() {
+    // 방장 찾기 — 저장된 값이 있으면 그 기기, 없으면(옛 방) 방을 만든 기기
+    expect("host saved id", PinLogic.resolveHost("host-device-1", "me", createdHere = false), "host-device-1")
+    expect("host saved wins over creator", PinLogic.resolveHost("host-1", "me", createdHere = true), "host-1")
+    expect("host legacy creator", PinLogic.resolveHost("", "me", createdHere = true), "me")
+    expect("host legacy non-creator", PinLogic.resolveHost("", "guest", createdHere = false), "")
+    expect("host legacy null", PinLogic.resolveHost(null, "guest", createdHere = false), "")
+    expect("host trims", PinLogic.resolveHost("   ", "me", createdHere = true), "me")
+
+    expect("isHost saved", PinLogic.isHost("me", "me", false), true)
+    expect("isHost other", PinLogic.isHost("other", "me", false), false)
+    expect("isHost legacy creator", PinLogic.isHost("", "me", true), true)
+    expect("isHost legacy guest", PinLogic.isHost("", "guest", false), false)
+    expect("isHost blank ids", PinLogic.isHost("", "", true), false)
+
+    // 내보낸 목록 — 더하기·중복 없음·한도
+    expect("kick add", PinLogic.withKicked(emptyList(), "b"), listOf("b"))
+    expect("kick dedupe moves to end", PinLogic.withKicked(listOf("a", "b"), "a"), listOf("b", "a"))
+    expect("kick keeps others", PinLogic.withKicked(listOf("a"), "b"), listOf("a", "b"))
+    expect("kick ignores blank", PinLogic.withKicked(listOf("a"), "  "), listOf("a"))
+    expect("kick trims target", PinLogic.withKicked(emptyList(), " b "), listOf("b"))
+    val many = (1..25).map { "d$it" }
+    val capped = PinLogic.withKicked(many, "new")
+    expect("kick cap size", capped.size, PinLogic.KICK_LIMIT)
+    expect("kick cap keeps newest", capped.last(), "new")
+    expect("kick cap drops oldest", capped.firstOrNull(), "d7")
+    expect("kick limit is rules limit", PinLogic.KICK_LIMIT, 20)
+
+    expect("kickedOut yes", PinLogic.kickedOut(listOf("a", "me"), "me"), true)
+    expect("kickedOut no", PinLogic.kickedOut(listOf("a"), "me"), false)
+    expect("kickedOut empty", PinLogic.kickedOut(emptyList(), "me"), false)
+    expect("kickedOut blank me", PinLogic.kickedOut(listOf(""), ""), false)
+
+    // 방 문서 모양 — hostDeviceId 를 넣고/빼고, kickedIds 배열 JSON
+    val room = FirestoreCodec.roomFields("ABC234", "영수", 1_700_000_000_000L, null, "host-9")
+    expect("room fields with host", room.size, 5)
+    expect("room host type", room["hostDeviceId"]?.keys?.first(), "stringValue")
+    expect("room host value", FirestoreCodec.str(room, "hostDeviceId"), "host-9")
+    expect("room without host", FirestoreCodec.roomFields("ABC234", "영수", 1_700_000_000_000L, null).size, 4)
+    expect("room host length cap", FirestoreCodec.str(
+        FirestoreCodec.roomFields("ABC234", "영수", 1_700_000_000_000L, null, "x".repeat(80)), "hostDeviceId")?.length, 64)
+    val meetingRoom = FirestoreCodec.roomFields(
+        "ABC234", "영수", 1_700_000_000_000L,
+        MeetingPoint(37.5, 127.0, "정자역", "영수", 1_700_000_000_000L), "host-9"
+    )
+    expect("room with meeting + host", meetingRoom.size, 10)
+
+    val kickJson = FirestoreCodec.documentJson(mapOf("kickedIds" to FirestoreCodec.stringArray(listOf("a", "b"))))
+    expect("kickedIds json", kickJson, "{\"fields\":{\"kickedIds\":{\"arrayValue\":{\"values\":[{\"stringValue\":\"a\"},{\"stringValue\":\"b\"}]}}}}")
+    expect("kickedIds empty json", FirestoreCodec.documentJson(mapOf("kickedIds" to FirestoreCodec.stringArray(emptyList()))),
+        "{\"fields\":{\"kickedIds\":{\"arrayValue\":{\"values\":[]}}}}")
+    expect("kickedIds mask", FirestoreCodec.kickMaskQuery(), "updateMask.fieldPaths=kickedIds")
+    expect("host mask", FirestoreCodec.hostMaskQuery(), "updateMask.fieldPaths=hostDeviceId")
+
+    // 읽기 — 서버 응답의 arrayValue → 목록
+    val fields: FirestoreFields = mapOf("kickedIds" to mapOf("arrayValue" to listOf("a", "b")))
+    expect("strList", FirestoreCodec.strList(fields, "kickedIds"), listOf("a", "b"))
+    expect("strList empty", FirestoreCodec.strList(mapOf("kickedIds" to mapOf("arrayValue" to emptyList<String>())), "kickedIds"), emptyList<String>())
+    expect("strList missing", FirestoreCodec.strList(emptyMap(), "kickedIds"), emptyList<String>())
+    expect("strList wrong type", FirestoreCodec.strList(mapOf("kickedIds" to mapOf("stringValue" to "a")), "kickedIds"), emptyList<String>())
 }

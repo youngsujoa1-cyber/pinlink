@@ -192,4 +192,19 @@
     <string name="chat_failed">メッセージを送信できませんでした。</string>
     <string name="chat_card_desc">このルームのメンバーとチャット</string>
     <string name="chat_unread">新着 %1$d</string>
+    <!-- ホストによる退出 (v1.0.7) -->
+    <string name="host_badge">ホスト</string>
+    <string name="kick_member">退出</string>
+    <string name="kick_title">メンバーを退出させる</string>
+    <string name="kick_body">%1$s さんをこのルームから退出させますか？</string>
+    <string name="kick_confirm">退出させる</string>
+    <string name="toast_kicked">%1$s さんを退出させました</string>
+    <string name="err_kick_failed">退出させられませんでした。もう一度お試しください。</string>
+    <string name="kicked_title">ルームから退出しました</string>
+    <string name="kicked_body">ホストによってルームから退出させられました。位置情報は共有されません。</string>
+
+    <!-- 地図下のチャット (v1.0.7) -->
+    <string name="chat_collapse">閉じる</string>
+    <string name="chat_expand">開く</string>
+    <string name="chat_open_full">全画面</string>
 </resources>

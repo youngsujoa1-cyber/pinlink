@@ -34,6 +34,7 @@ import com.youngsu.pinlink.CrashLog
 import com.youngsu.pinlink.R
 import com.youngsu.pinlink.ads.AdManager
 import com.youngsu.pinlink.ads.InterstitialHelper
+import com.youngsu.pinlink.core.Member
 import com.youngsu.pinlink.core.ShareMode
 import com.youngsu.pinlink.data.AppPrefs
 import com.youngsu.pinlink.data.PinSession
@@ -61,6 +62,8 @@ class MainActivity : AppCompatActivity() {
     private var currentTab = R.id.nav_map
     private var topInset = 0
     private var bottomInset = 0
+    /** 지금 올라와 있는 키보드 높이 (없으면 0) — 채팅 입력줄이 가려지지 않게 콘텐츠를 올린다 */
+    private var imeInset = 0
     private var lastStructureKey = ""
     private var pendingPermission: ((Boolean) -> Unit)? = null
     private var backgroundAsked = false
@@ -156,6 +159,15 @@ class MainActivity : AppCompatActivity() {
                 true
             }
         }
+        // Material 의 BottomNavigationView 는 자기 OnApplyWindowInsetsListener 로 시스템 하단 인셋
+        // (3버튼 내비게이션 바 약 48dp)을 자기 paddingBottom 에 더한다. 높이를 64dp 로 고정해 두었기 때문에
+        // 그 폰에서는 64dp 중 48dp 가 패딩으로 먹혀 아이콘·글자가 아래로 밀려 잘리고,
+        // 탭 바가 **검은 빈칸**처럼 보였다(v1.0.6 실기기: 지도·방·채팅·설정 탭이 사라짐).
+        // 인셋은 맨 아래 배너(adContainer)에서만 먹고, 탭 바 자신은 먹지 않게 막는다.
+        ViewCompat.setOnApplyWindowInsetsListener(bottomNav) { view, insets ->
+            if (view.paddingBottom != 0 || view.paddingTop != 0) view.setPadding(0, 0, 0, 0)
+            insets
+        }
         root.addView(bottomNav, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64f)))
 
         // 3) 배너 광고 — 화면 맨 끝(최하단)
@@ -172,6 +184,7 @@ class MainActivity : AppCompatActivity() {
             )
             topInset = bars.top
             bottomInset = bars.bottom
+            imeInset = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
             applyInsets()
             insets
         }
@@ -240,6 +253,8 @@ class MainActivity : AppCompatActivity() {
             PinSession.removeListener(sessionListener)
             PinSession.setUiVisible(false)
             PinSession.closeChat()
+            // 지도 아래 인라인 채팅창도 화면을 떠나면 '보지 않는 중'으로 돌린다
+            PinSession.setInlineChatOpen(false)
             main.removeCallbacks(updater)
         }
     }
@@ -257,6 +272,8 @@ class MainActivity : AppCompatActivity() {
         }
         if (leavingChat) PinSession.closeChat()
         if (itemId == R.id.nav_chat) PinSession.openChat()
+        // 지도 탭을 떠나면 지도 아래 인라인 채팅도 '보지 않는 중'으로 돌린다 (안 읽은 배지가 살아 있게)
+        if (itemId != R.id.nav_map) PinSession.setInlineChatOpen(false)
         content.removeAllViews()
         content.addView(screen, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
@@ -298,6 +315,8 @@ class MainActivity : AppCompatActivity() {
                 else -> mapScreen.refresh()
             }
             updateChatBadge()
+            // 방장이 나를 내보냈으면 한 번만 안내한다 (백그라운드에 있었다면 돌아왔을 때)
+            if (PinSession.consumeKickedNotice()) showKickedNotice()
         }
     }
 
@@ -409,6 +428,46 @@ class MainActivity : AppCompatActivity() {
                 bottomNav.selectedItemId = R.id.nav_map
                 refreshSoon()
             }
+        }
+    }
+
+    // --------------------------------------------------- 방장 내보내기 (v1.0.7)
+
+    /** 방장이 멤버 행의 '내보내기'를 눌렀다 — 실수 방지를 위해 한 번 더 묻는다 */
+    fun confirmKickMember(member: Member) {
+        if (!PinSession.isHost) return
+        Dialogs.confirm(
+            this,
+            getString(R.string.kick_title),
+            getString(R.string.kick_body, member.name),
+            getString(R.string.kick_confirm),
+            getString(R.string.cancel),
+            destructive = true
+        ) {
+            PinSession.kickMember(member) { fault ->
+                if (fault == null) toast(getString(R.string.toast_kicked, member.name))
+                else toastFault(getString(R.string.err_kick_failed), fault)
+                refreshSoon()
+            }
+        }
+    }
+
+    /** 내가 방장에 의해 내보내졌을 때의 안내 */
+    private fun showKickedNotice() {
+        if (isFinishing || isDestroyed) return
+        runCatching {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(getString(R.string.kicked_title))
+                .setMessage(getString(R.string.kicked_body))
+                .setPositiveButton(getString(R.string.close)) { _, _ -> }
+                .setCancelable(false)
+                .create()
+                .apply {
+                    setOnShowListener {
+                        getButton(android.app.AlertDialog.BUTTON_POSITIVE).setTextColor(getColor(R.color.accent))
+                    }
+                }
+                .show()
         }
     }
 
@@ -640,8 +699,16 @@ class MainActivity : AppCompatActivity() {
     private fun dp(value: Float): Int = (value * resources.displayMetrics.density + 0.5f).toInt()
 
     private fun applyInsets() {
-        // 상태바는 콘텐츠 위 여백으로, 시스템 내비게이션 바는 맨 아래 배너 밑 여백으로 비켜 준다
-        content.setPadding(0, topInset, 0, 0)
+        // 상태바는 콘텐츠 위 여백으로, 시스템 내비게이션 바는 맨 아래 배너 밑 여백으로 비켜 준다.
+        // 탭 바는 자기 패딩을 갖지 않는다 — Material 이 시스템 인셋을 한 번 더 먹으면
+        // 3버튼 내비게이션 바 폰에서 탭이 잘려 빈칸처럼 보인다(v1.0.6 실기기 버그).
+        bottomNav.setPadding(0, 0, 0, 0)
+        // 키보드가 올라오면 그 높이만큼 콘텐츠만 올린다(탭·배너는 키보드 뒤에 가려진다).
+        // adjustResize 는 edge-to-edge(decorFitsSystemWindows=false)에서 창을 줄여 주지 않으므로
+        // 채팅 입력줄이 키보드에 가리는 문제를 여기서 직접 막는다.
+        val coveredBottom = bottomNav.height + adContainer.height
+        val lift = if (imeInset > 0 && coveredBottom > 0) (imeInset - coveredBottom).coerceAtLeast(0) else 0
+        content.setPadding(0, topInset, 0, lift)
         adContainer.setPadding(0, 0, 0, bottomInset)
     }
 

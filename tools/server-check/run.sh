@@ -138,6 +138,90 @@ expect_code "소문자 방 코드 메시지도 거부 (403)" 403 \
   "$(req PATCH "$BASE/rooms/chat01/messages/b-lower?key=$API_KEY" "$TMP/chat.json")"
 
 say ""
+say "── 방장 내보내기 (v1.0.7) ─────────────────────────────────────"
+# 규칙: rooms.kickedIds 에 들어간 기기는 자기 members/{deviceId} 를 **다시 쓸 수 없다**.
+#       그래서 방장이 내보낸 뒤에도 그 폰의 위치 업로드(8초 주기)가 방에 재등장하지 않는다.
+#       옛 방(kickedIds 필드 없음)에서도 오류 없이 통과해야 한다(레거시 방 보호).
+KICKED=${KICKED:-servercheck-kicked01}
+OTHER=${OTHER:-servercheck-other01}
+HOST=${HOST:-servercheck-host01}
+
+# 1) 아직 kickedIds 가 없는 방(레거시 모양)에 멤버 쓰기 → 200
+#    (exists()·'kickedIds' in … 가드가 오류를 내지 않는지 확인하는 회귀 검사)
+#    매번 같은 조건으로 돌도록 방 문서를 4필드(옛 모양)로 다시 만든 뒤 검사한다.
+LEGACY_CODE=${LEGACY_CODE:-LEGACY}
+cat > "$TMP/legacy-room.json" <<JSON
+{"fields":{"code":{"stringValue":"$LEGACY_CODE"},"owner":{"stringValue":"서버검사"},"createdAt":{"timestampValue":"$now_iso"},"active":{"booleanValue":true}}}
+JSON
+expect_code "레거시 모양 방 만들기 (hostDeviceId·kickedIds 없음)" 200 \
+  "$(req PATCH "$BASE/rooms/$LEGACY_CODE?key=$API_KEY" "$TMP/legacy-room.json")"
+expect_code "레거시 방(필드 없음)에 멤버 쓰기" 200 \
+  "$(req PATCH "$BASE/rooms/$LEGACY_CODE/members/$OTHER?key=$API_KEY" "$TMP/member8.json")"
+req DELETE "$BASE/rooms/$LEGACY_CODE/members/$OTHER?key=$API_KEY" >/dev/null
+
+# 2) 방장 정보·내보낸 목록 올리기
+cat > "$TMP/kick.json" <<JSON
+{"fields":{"kickedIds":{"arrayValue":{"values":[{"stringValue":"$KICKED"}]}}}}
+JSON
+expect_code "kickedIds 배열 쓰기 (updateMask)" 200 \
+  "$(req PATCH "$BASE/rooms/$CODE?key=$API_KEY&updateMask.fieldPaths=kickedIds" "$TMP/kick.json")"
+cat > "$TMP/host.json" <<JSON
+{"fields":{"hostDeviceId":{"stringValue":"$HOST"}}}
+JSON
+expect_code "hostDeviceId 쓰기 (updateMask · 옛 방 방장 등록)" 200 \
+  "$(req PATCH "$BASE/rooms/$CODE?key=$API_KEY&updateMask.fieldPaths=hostDeviceId" "$TMP/host.json")"
+
+# 3) 내보낸 기기 vs 남은 기기
+cat > "$TMP/member-kicked.json" <<JSON
+{"fields":{"name":{"stringValue":"내보내진 기기"},"color":{"stringValue":"#FF6B7A"},"lat":{"doubleValue":37.3980},"lng":{"doubleValue":127.1090},"battery":{"integerValue":"55"},"sharing":{"booleanValue":true},"speedKmh":{"doubleValue":0.0},"staySince":{"timestampValue":"$now_iso"}}}
+JSON
+expect_code "내보낸 기기의 멤버 쓰기는 거부 (403 · 재입장 차단)" 403 \
+  "$(req PATCH "$BASE/rooms/$CODE/members/$KICKED?key=$API_KEY" "$TMP/member-kicked.json")"
+expect_code "내보내지 않은 기기는 그대로 통과 (200)" 200 \
+  "$(req PATCH "$BASE/rooms/$CODE/members/$OTHER?key=$API_KEY" "$TMP/member8.json")"
+expect_code "내보낸 기기의 멤버 문서 삭제(정리)는 허용 (200)" 200 \
+  "$(req DELETE "$BASE/rooms/$CODE/members/$KICKED?key=$API_KEY")"
+
+# 4) 내보낸 기기는 채팅도 쓰지 못한다
+cat > "$TMP/chat-kicked.json" <<JSON
+{"fields":{"senderId":{"stringValue":"$KICKED"},"senderName":{"stringValue":"내보내진 기기"},"senderColor":{"stringValue":"#FF6B7A"},"text":{"stringValue":"아직 들어 있어요"},"createdAtMs":{"integerValue":"$CHAT_NOW"}}}
+JSON
+expect_code "내보낸 기기의 메시지도 거부 (403 · 같은 방에서)" 403 \
+  "$(req PATCH "$BASE/rooms/$CODE/messages/b-kicked?key=$API_KEY" "$TMP/chat-kicked.json")"
+
+# 5) 모양 제한 — 21개·문자열은 거부
+mkdir -p "$TMP/many"
+python3 - "$TMP/many/kick21.json" <<'PY'
+import json, sys
+values = [{"stringValue": "kicked-%02d" % i} for i in range(21)]
+json.dump({"fields": {"kickedIds": {"arrayValue": {"values": values}}}}, open(sys.argv[1], "w"))
+PY
+expect_code "kickedIds 21개는 거부 (403 · 규칙 20개 한도)" 403 \
+  "$(req PATCH "$BASE/rooms/$CODE?key=$API_KEY&updateMask.fieldPaths=kickedIds" "$TMP/many/kick21.json")"
+cat > "$TMP/kick-string.json" <<JSON
+{"fields":{"kickedIds":{"stringValue":"$KICKED"}}}
+JSON
+expect_code "kickedIds 가 배열이 아니면 거부 (403)" 403 \
+  "$(req PATCH "$BASE/rooms/$CODE?key=$API_KEY&updateMask.fieldPaths=kickedIds" "$TMP/kick-string.json")"
+
+# 6) 방이 아예 없을 때의 멤버 쓰기는 그대로 통과 (exists() 가드)
+expect_code "방 없는 곳의 멤버 쓰기는 그대로 통과 (200)" 200 \
+  "$(req PATCH "$BASE/rooms/QQQQQQ/members/$DEVICE?key=$API_KEY" "$TMP/member8.json")"
+
+# 7) 내보내기 뒤에도 방 문서의 다른 기능(약속 장소 updateMask)은 그대로 → 200
+expect_code "kickedIds 가 있는 방에서도 약속 장소 PATCH 는 통과" 200 \
+  "$(req PATCH "$BASE/rooms/$CODE?key=$API_KEY&$MASK" "$TMP/meeting.json")"
+
+# 8) 검사 흔적 정리 — 내보낸 목록을 비우고 방장 값만 남긴다(필드는 지울 수 없어 빈 값으로)
+cat > "$TMP/kick-empty.json" <<JSON
+{"fields":{"kickedIds":{"arrayValue":{"values":[]}}}}
+JSON
+req PATCH "$BASE/rooms/$CODE?key=$API_KEY&updateMask.fieldPaths=kickedIds" "$TMP/kick-empty.json" >/dev/null
+expect_code "멤버 정리 (남은 검사 멤버 삭제)" 200 \
+  "$(req DELETE "$BASE/rooms/$CODE/members/$OTHER?key=$API_KEY")"
+req DELETE "$BASE/rooms/QQQQQQ/members/$DEVICE?key=$API_KEY" >/dev/null
+
+say ""
 say "검사 방: rooms/$CODE (규칙상 방 문서는 앱에서 지울 수 없습니다 — 콘솔에서 지우면 됩니다)"
 say "채팅 검사 메시지는 rooms/$CHAT_CODE/messages 에 남습니다(규칙상 삭제 불가 — 콘솔에서 정리)"
 say "결과: $PASS 통과 · $FAIL 실패 (프로젝트 $PROJECT_ID)"

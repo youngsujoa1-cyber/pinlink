@@ -192,4 +192,19 @@
     <string name="chat_failed">No se pudo enviar el mensaje.</string>
     <string name="chat_card_desc">Habla con todos los de esta sala</string>
     <string name="chat_unread">%1$d nuevos</string>
+    <!-- Expulsar miembros (v1.0.7) -->
+    <string name="host_badge">Anfitrión</string>
+    <string name="kick_member">Expulsar</string>
+    <string name="kick_title">Expulsar a un miembro</string>
+    <string name="kick_body">¿Expulsar a %1$s de esta sala?</string>
+    <string name="kick_confirm">Expulsar</string>
+    <string name="toast_kicked">Se expulsó a %1$s de la sala</string>
+    <string name="err_kick_failed">No se pudo expulsar al miembro. Inténtalo de nuevo.</string>
+    <string name="kicked_title">Has salido de la sala</string>
+    <string name="kicked_body">El anfitrión te ha expulsado de esta sala. Tu ubicación ya no se comparte.</string>
+
+    <!-- Chat bajo el mapa (v1.0.7) -->
+    <string name="chat_collapse">Contraer</string>
+    <string name="chat_expand">Expandir</string>
+    <string name="chat_open_full">Pantalla completa</string>
 </resources>

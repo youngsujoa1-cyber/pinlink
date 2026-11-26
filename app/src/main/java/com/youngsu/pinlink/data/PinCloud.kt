@@ -22,16 +22,20 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** 방 하나의 정보 — 방장·만든 시각·약속 장소 */
+/** 방 하나의 정보 — 방장·만든 시각·약속 장소·내보낸 기기 (v1.0.7) */
 data class RoomInfo(
     val code: String,
     val owner: String,
     val createdAt: Long,
-    val meeting: MeetingPoint?
+    val meeting: MeetingPoint?,
+    /** 방장 기기 ID — v1.0.6 이전에 만든 방은 "" (모름) */
+    val hostId: String = "",
+    /** 방장이 내보낸 기기 ID 목록 — 이 기기들은 규칙이 멤버 문서 쓰기를 막는다 */
+    val kicked: List<String> = emptyList()
 )
 
 /** 방을 만들거나 되살릴 때 필요한 최소 정보 */
-data class RoomSeed(val code: String, val owner: String, val createdAt: Long)
+data class RoomSeed(val code: String, val owner: String, val createdAt: Long, val hostId: String = "")
 
 /**
  * 실패한 이유. v1.0.4 까지는 모든 실패를 `false` 하나로 뭉개서 화면에
@@ -95,7 +99,18 @@ interface SyncEngine {
 
     val demo: Boolean
 
-    fun createRoom(code: String, ownerName: String, createdAt: Long, onDone: (SyncFault?) -> Unit)
+    fun createRoom(code: String, ownerName: String, hostId: String, createdAt: Long, onDone: (SyncFault?) -> Unit)
+
+    /** 옛 방(hostDeviceId 없음)을 만든 기기가 자기 자신을 방장으로 한 번 등록한다 */
+    fun claimHost(code: String, hostId: String, onDone: (SyncFault?) -> Unit)
+
+    /**
+     * 방장이 멤버를 내보낸다.
+     *  1) `rooms/{code}.kickedIds` 에 대상을 **먼저** 더하고(규칙이 그 기기의 멤버 문서 쓰기를 막는다)
+     *  2) `rooms/{code}/members/{targetId}` 를 지운다.
+     * 순서가 반대면 상대 폰의 다음 업로드(8초)가 그 사이에 자기 문서를 다시 써서 방에 재등장한다.
+     */
+    fun kick(code: String, targetId: String, onDone: (SyncFault?) -> Unit)
 
     /** 없으면 Missing, 못 물어보면 Failed */
     fun fetchRoom(code: String, onDone: (RoomLookup) -> Unit)
@@ -138,9 +153,45 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
     private fun membersUrl(code: String) = "$base/rooms/$code/members"
     private fun messagesUrl(code: String) = "$base/rooms/$code/messages"
 
-    override fun createRoom(code: String, ownerName: String, createdAt: Long, onDone: (SyncFault?) -> Unit) {
-        val body = FirestoreCodec.documentJson(FirestoreCodec.roomFields(code, ownerName, createdAt, null))
+    override fun createRoom(code: String, ownerName: String, hostId: String, createdAt: Long, onDone: (SyncFault?) -> Unit) {
+        val body = FirestoreCodec.documentJson(FirestoreCodec.roomFields(code, ownerName, createdAt, null, hostId))
         send("PATCH rooms/$code", "${roomUrl(code)}?key=$apiKey", "PATCH", body) { onDone(it) }
+    }
+
+    override fun claimHost(code: String, hostId: String, onDone: (SyncFault?) -> Unit) {
+        val fields = mapOf("hostDeviceId" to mapOf<String, Any>("stringValue" to hostId.take(64)))
+        val body = FirestoreCodec.documentJson(fields)
+        send("PATCH host", "${roomUrl(code)}?key=$apiKey&${FirestoreCodec.hostMaskQuery()}", "PATCH", body) { onDone(it) }
+    }
+
+    override fun kick(code: String, targetId: String, onDone: (SyncFault?) -> Unit) {
+        pool.execute {
+            // 1) 지금 내보낸 목록을 읽어 **합친다** (덮어쓰면 다른 방장 기기가 내보낸 사람이 풀린다)
+            val current = call("GET room (kick)", "${roomUrl(code)}?key=$apiKey", "GET", null)
+            val kicked = if (current != null && current.ok) roomOf(code, current.body).kicked else emptyList()
+            val next = PinLogic.withKicked(kicked, targetId)
+            val body = FirestoreCodec.documentJson(
+                mapOf("kickedIds" to FirestoreCodec.stringArray(next))
+            )
+            val patch = call(
+                "PATCH kicked",
+                "${roomUrl(code)}?key=$apiKey&${FirestoreCodec.kickMaskQuery()}",
+                "PATCH",
+                body
+            )
+            var fault: SyncFault? = when {
+                patch == null -> SyncFault.offline("connection failed")
+                patch.ok -> null
+                else -> faultOf(patch)
+            }
+            // 2) kickedIds 가 올라간 뒤에만 멤버 문서를 지운다
+            if (fault == null) {
+                val deleted = call("DELETE kicked member", "${membersUrl(code)}/$targetId?key=$apiKey", "DELETE", null)
+                if (deleted == null) fault = SyncFault.offline("connection failed")
+                else if (!deleted.ok && deleted.code != 404) fault = faultOf(deleted)
+            }
+            main.post { onDone(fault) }
+        }
     }
 
     override fun fetchRoom(code: String, onDone: (RoomLookup) -> Unit) {
@@ -172,7 +223,7 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
                 is RoomLookup.Failed -> onDone(lookup.fault)
                 is RoomLookup.Missing -> {
                     SyncLog.record("room-missing", "rooms/${seed.code} → create")
-                    createRoom(seed.code, seed.owner, seed.createdAt) { fault ->
+                    createRoom(seed.code, seed.owner, seed.hostId, seed.createdAt) { fault ->
                         if (fault == null) SyncLog.record("room-recreated", "rooms/${seed.code}")
                         onDone(fault)
                     }
@@ -374,7 +425,9 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
             code = code,
             owner = FirestoreCodec.str(fields, "owner").orEmpty(),
             createdAt = FirestoreCodec.parseIso(FirestoreCodec.str(fields, "createdAt")),
-            meeting = FirestoreCodec.meetingFrom(fields)
+            meeting = FirestoreCodec.meetingFrom(fields),
+            hostId = FirestoreCodec.str(fields, "hostDeviceId").orEmpty(),
+            kicked = FirestoreCodec.strList(fields, "kickedIds")
         )
     }
 
@@ -391,6 +444,19 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
                 "integerValue" -> value.optString(type)
                 "booleanValue" -> value.optBoolean(type)
                 "doubleValue" -> value.optDouble(type)
+                // v1.0.7 — kickedIds 처럼 문자열 배열 필드
+                "arrayValue" -> {
+                    val array = value.optJSONObject(type)?.optJSONArray("values")
+                    val items = ArrayList<String>()
+                    if (array != null) {
+                        for (i in 0 until array.length()) {
+                            val item = array.optJSONObject(i) ?: continue
+                            val text = item.optString("stringValue")
+                            if (text.isNotEmpty()) items.add(text)
+                        }
+                    }
+                    items
+                }
                 else -> value.optString(type)
             }
             out[name] = mapOf(type to raw)
@@ -417,8 +483,20 @@ class DemoEngine : SyncEngine {
 
     private val rooms = HashMap<String, RoomInfo>()
 
-    override fun createRoom(code: String, ownerName: String, createdAt: Long, onDone: (SyncFault?) -> Unit) {
-        rooms[code] = RoomInfo(code, ownerName, createdAt, rooms[code]?.meeting)
+    override fun createRoom(code: String, ownerName: String, hostId: String, createdAt: Long, onDone: (SyncFault?) -> Unit) {
+        rooms[code] = RoomInfo(code, ownerName, createdAt, rooms[code]?.meeting, hostId, rooms[code]?.kicked.orEmpty())
+        onDone(null)
+    }
+
+    override fun claimHost(code: String, hostId: String, onDone: (SyncFault?) -> Unit) {
+        rooms[code] = rooms[code]?.copy(hostId = hostId) ?: RoomInfo(code, hostId, System.currentTimeMillis(), null, hostId)
+        onDone(null)
+    }
+
+    override fun kick(code: String, targetId: String, onDone: (SyncFault?) -> Unit) {
+        val room = rooms[code]
+        rooms[code] = room?.copy(kicked = PinLogic.withKicked(room.kicked, targetId))
+            ?: RoomInfo(code, "demo", System.currentTimeMillis(), null, kicked = listOf(targetId))
         onDone(null)
     }
 
@@ -443,7 +521,11 @@ class DemoEngine : SyncEngine {
         val base = anchor ?: DEFAULT_ANCHOR
         val now = System.currentTimeMillis()
         val t = now / 1000.0
-        val out = DEMO_FRIENDS.mapIndexed { index, friend ->
+        val kicked = rooms[code]?.kicked.orEmpty()
+        val out = DEMO_FRIENDS
+            // 방장이 내보낸 친구는 목록에서 사라진다 — 데모에서도 내보내기 흐름이 그대로 보인다
+            .filterNot { PinLogic.kickedOut(kicked, it.id) }
+            .mapIndexed { index, friend ->
             val radius = 230.0 + index * 170.0
             val angle = t / (60.0 + index * 25.0) + index * PI
             val lat = base.lat + (radius * sin(angle)) / 111_320.0
@@ -466,7 +548,7 @@ class DemoEngine : SyncEngine {
 
     override fun setMeeting(seed: RoomSeed, meeting: MeetingPoint?, onDone: (SyncFault?) -> Unit) {
         rooms[seed.code] = rooms[seed.code]?.copy(meeting = meeting)
-            ?: RoomInfo(seed.code, seed.owner, System.currentTimeMillis(), meeting)
+            ?: RoomInfo(seed.code, seed.owner, System.currentTimeMillis(), meeting, seed.hostId)
         onDone(null)
     }
 

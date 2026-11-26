@@ -3,7 +3,7 @@
 친구·가족·동료가 **6자리 방 코드**로 같은 방에 들어와 서로의 위치를 한 지도에서 보는 안드로이드 앱입니다.
 플레이스토어 출시와 AdMob 광고 수익화를 전제로 만들었고, 첫 실행부터 5개 언어(한국어·영어·일본어·중국어·스페인어)를 지원합니다.
 
-- 패키지 `com.youngsu.pinlink` · versionCode `7` · versionName `1.0.6` · minSdk 26 / targetSdk 35
+- 패키지 `com.youngsu.pinlink` · versionCode `8` · versionName `1.0.7` · minSdk 26 / targetSdk 35
 - 지도(하이브리드): **국내는 네이버 지도(JavaScript API v3, WebView)**, **해외는 CARTO 512×512(@2x) 베이스맵**(Canvas 직접 그리기)으로 자동 전환합니다. 대한민국 범위(위도 33.0~38.9, 경도 124.5~132.0)면 네이버, 그 밖이거나 네이버 지도가 뜨지 않으면 CARTO — 지금 떠 있는 지도는 화면 우측 상단 배지(`NAVER` / `CARTO`)에 표시합니다. 어두운/밝은 지도는 두 지도 모두에서 1탭 전환되고 고른 스타일은 앱에 저장됩니다. 네이버 키(`NAVER_MAP_CLIENT_ID`)가 없으면 전 세계를 CARTO 로만 그립니다.
 - 동기화: Firestore REST(`HttpURLConnection`) — 외부 SDK 없음. **v1.0.3 부터 PinLink 전용 무료 Firebase 프로젝트(`pinlink-live`, 서울 리전)에 실제로 연결**되어 있고, 키가 비어 있는 빌드에서는 데모 모드(친구 2명 시뮬레이션)로 내려갑니다.
 
@@ -22,6 +22,9 @@
 | **방 채팅 (v1.0.6)** | 방 안 사람들끼리 실시간 대화. 하단 `채팅` 탭 + 지도 우상단 채팅 버튼·방 화면 채팅 카드로 열고, 열어 둔 동안 3초마다 새 메시지를 확인합니다. 내 말풍선은 오른쪽 골드, 남의 말풍선은 왼쪽 유리판 + 아바타 색. 읽지 않은 메시지는 탭 배지(`9+`)·지도 버튼 배지·방 카드에 표시되고, 한 건 500자까지. 위치를 숨겨도 대화는 계속됩니다 |
 | 디자인 (v1.0.5) | 딥 옵시디언/차콜 글라스 + 샴페인 골드 · 플래티넘 · 시안 포인트. 지도 위 칩은 반투명 다크 글라스 + 1dp 테두리. 아바타 색 팔레트도 샴페인·플래티넘·시안 톤으로 교체(예전 기본 민트는 한 번만 새 기본값으로 이동) |
 | 광고 | 화면 최하단 배너(콘텐츠 → 하단 탭 바 → 배너), 방 생성·참여 직후 전면 광고(3분 쿨다운). Google 공식 테스트 ID |
+| **방장 내보내기 (v1.0.7)** | 방을 만든 기기가 **방장**이 됩니다(멤버 행에 `방장` 배지). 방장에게만 다른 멤버 행에 `내보내기` 버튼이 보이고, 누르면 `"{이름} 님을 방에서 내보낼까요?"` 확인 창을 거칩니다. 내보낸 기기는 서버 방 문서 `kickedIds` 에 남아 **위치를 다시 올려도 보안 규칙이 403 으로 막습니다**(재입장 차단). 내보내진 폰은 다음 폴링(최대 24초, 숨김 상태 20초)에서 즉시 공유를 멈추고 방에서 나간 뒤 "방장에 의해 방에서 나갔어요" 안내를 보여 줍니다 |
+| **지도 아래 채팅 (v1.0.7)** | 지도를 보면서 바로 대화할 수 있게 `지도` 탭 지도 영역 **아래**에 방 채팅창(최근 30건·입력줄·전송)을 붙였습니다. 헤더를 누르면 접기/펼치기, `크게 보기`로 채팅 탭 이동. 펼쳐져 있는 동안은 새 메시지를 읽음으로 쳐서 하단 배지와 상태가 함께 줄어듭니다 |
+| 오류 수정 (v1.0.7) | ① **네이버 지도에 다른 멤버 핀이 하나도 안 보이던 문제**: `NaverMapView` 가 배열 리터럴(`PinLink.setMembers([{…}])`)을 넘기는데 지도 페이지는 `JSON.parse` 를 먼저 불러 배열이 `"[object Object]"` 가 되며 `SyntaxError` → 멤버 목록이 빈 배열로 덮였습니다. 배열이면 그대로 받도록 고치고 지도 JS 검사에 **배열 인자 회귀 검사**를 추가했습니다. ② **3버튼 내비게이션 바 폰에서 하단 탭이 빈칸으로 사라지던 문제**: `BottomNavigationView` 가 시스템 하단 인셋(약 48dp)을 자기 `paddingBottom` 으로 한 번 더 먹어 64dp 중 대부분이 패딩이 됐습니다. 탭 바는 인셋을 먹지 않게 막고 배너에서만 먹입니다 |
 | 정보 | 개인정보 처리방침(한국어/영어) 앱 내 WebView + `docs/privacy.html` |
 
 ## 빌드
@@ -63,44 +66,61 @@ PinLink 전용 **무료 Firebase 프로젝트**(Spark, 결제수단 등록 없�
 - API 키는 Google Cloud 콘솔에서 **Cloud Firestore API 전용**으로 제한했습니다(다른 API 호출은 거부). Android 앱 제한(패키지·SHA-1)은 순수 `HttpURLConnection` 호출에 헤더가 실리지 않아 걸면 호출이 깨지므로 걸지 않았습니다.
 - 키를 줄여도 공개 규칙 때문에 **키 없이도 REST 호출은 통과**합니다. 실제 방어선은 아래 보안 규칙입니다.
 
-콘솔에 게시된 보안 규칙(한 줄로 저장돼 있음 — 콘솔 편집기가 줄바꿈을 합치고 `//` 주석 뒤를 먹으므로 주석 없이 올렸습니다):
+게시된 보안 규칙 **v1.0.7**(콘솔에는 한 줄로 저장됩니다 — 편집기가 줄바꿈을 합치고 `//` 주석 뒤를 먹으므로 주석 없이 올립니다. 원본: `firestore.rules`, 콘솔용 한 줄: `firestore.rules.oneline`):
 
 ```javascript
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    function okCode(c) { return c is string && c.matches('^[A-Z0-9]{6}$'); }
+
+    function okCode(c) {
+      return c is string && c.matches('^[A-Z0-9]{6}$');
+    }
+
+    function kicked(c, d) {
+      return exists(/databases/$(database)/documents/rooms/$(c))
+        && ('kickedIds' in get(/databases/$(database)/documents/rooms/$(c)).data)
+        && (d in get(/databases/$(database)/documents/rooms/$(c)).data.kickedIds);
+    }
 
     match /rooms/{code} {
       allow read: if true;
-      allow create, update: if okCode(code) && request.resource.data.size() <= 14
+      allow create, update: if okCode(code) && request.resource.data.size() <= 16
         && request.resource.data.code == code
         && (!request.resource.data.keys().hasAny(['owner'])
             || (request.resource.data.owner is string && request.resource.data.owner.size() <= 40))
         && (!request.resource.data.keys().hasAny(['meetingName'])
             || (request.resource.data.meetingName is string && request.resource.data.meetingName.size() <= 60))
         && (!request.resource.data.keys().hasAny(['meetingBy'])
-            || (request.resource.data.meetingBy is string && request.resource.data.meetingBy.size() <= 40));
+            || (request.resource.data.meetingBy is string && request.resource.data.meetingBy.size() <= 40))
+        && (!request.resource.data.keys().hasAny(['hostDeviceId'])
+            || (request.resource.data.hostDeviceId is string && request.resource.data.hostDeviceId.size() <= 64))
+        && (!request.resource.data.keys().hasAny(['kickedIds'])
+            || (request.resource.data.kickedIds is list && request.resource.data.kickedIds.size() <= 20));
       allow delete: if false;   // 방 문서는 앱에서 지우지 않는다(남용 방지)
 
       match /members/{deviceId} {
         allow read: if true;
         allow create, update: if okCode(code) && request.resource.data.size() <= 8
+          && !kicked(code, deviceId)
           && request.resource.data.lat is number && request.resource.data.lat >= -90 && request.resource.data.lat <= 90
           && request.resource.data.lng is number && request.resource.data.lng >= -180 && request.resource.data.lng <= 180
           && (!request.resource.data.keys().hasAny(['name'])
               || (request.resource.data.name is string && request.resource.data.name.size() <= 40));
-        allow delete: if true;  // 나가기
+        allow delete: if true;  // 나가기 · 방장의 내보내기(멤버 문서 정리)
       }
 
       match /messages/{msgId} {
         allow read: if true;
-        allow create: if okCode(code) && request.resource.data.size() <= 5
+        allow create: if okCode(code)
+          && request.resource.data.size() <= 5
           && request.resource.data.senderId is string
           && request.resource.data.senderId.size() > 0 && request.resource.data.senderId.size() <= 64
           && request.resource.data.text is string
           && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500
           && request.resource.data.createdAtMs is int && request.resource.data.createdAtMs > 0
+          && !kicked(code, request.resource.data.senderId)
           && (!request.resource.data.keys().hasAny(['senderName'])
               || (request.resource.data.senderName is string && request.resource.data.senderName.size() <= 40))
           && (!request.resource.data.keys().hasAny(['senderColor'])
@@ -118,7 +138,7 @@ service cloud.firestore {
 문서 모양:
 
 ```
-rooms/{code}                     code, owner, createdAt, active, meetingLat/Lng/Name/By/At
+rooms/{code}                     code, owner, createdAt, active, meetingLat/Lng/Name/By/At, hostDeviceId, kickedIds[]  (v1.0.7)
 rooms/{code}/members/{deviceId}  name, color, lat, lng, battery, sharing, speedKmh, staySince
 rooms/{code}/messages/{msgId}    senderId, senderName, senderColor, text, createdAtMs  (v1.0.6)
 ```
@@ -161,6 +181,11 @@ app/src/main/java/com/youngsu/pinlink/
 
 ## 검증한 것 / 못 한 것
 
+- `./gradlew --offline lintDebug assembleDebug` 통과 (lint error 0 · warning 14, v1.0.7)
+- `bash tools/logic-check/run.sh` — v1.0.7 **284 PASS / 0 FAIL** (방장·내보내기 38개 추가: 방장 찾기·레거시 방·내보낸 목록 합치기/한도/중복, 방 문서 hostDeviceId·kickedIds 배열 JSON·마스크)
+- `bash tools/server-check/run.sh` — v1.0.7 실서버 **33/33 통과** (v1.0.6 의 20개 + 방장 13개: 레거시 방 멤버 쓰기 200, kickedIds·hostDeviceId 200, **내보낸 기기 멤버 쓰기 403**, 남은 기기 200, 내보낸 기기 메시지 403, kickedIds 21개·문자열 403, 방 없는 멤버 쓰기 200, 약속 PATCH 200)
+- `bash tools/ui-smoke/run.sh` — v1.0.7 **25개 통과** (새 10개: 하단 탭 인셋·3버튼 바, 지도+아래 채팅창 배치/토글/말풍선, 방장 배지·내보내기 버튼·게스트 숨김·레거시 방장·내보내짐 즉시 퇴장)
+- `python3 tools/map-js-check/check.py` — v1.0.7 **33개 통과** (배열 인자로 넘긴 멤버 핀 회귀 검사 7개 추가, v1.0.6 코드에서는 5개가 실패하는 것을 확인)
 - `./gradlew --offline lintDebug assembleDebug` 통과 (lint error 0, v1.0.5)
 - `./gradlew --offline lintDebug assembleDebug` 통과 (lint error 0, v1.0.6)
 - `bash tools/logic-check/run.sh` — v1.0.6 **246 PASS / 0 FAIL** (방 채팅 47개 추가: 글 다듬기·문서 ID 순서·합치기·읽지 않음·시각·5필드)
@@ -349,3 +374,34 @@ a2.5 2.5 0 010-5      ← 기기(ART)의 PathParser 가 "a needs to be followed 
 - `ResourceSmokeTest`: 앱의 **모든 drawable·mipmap 을 실제 파서로 inflate** (12개 테스트 전부 통과), 런처 아이콘·알림 아이콘을 비트맵으로 그려 픽셀 확인
 - `UiSmokeTest`: 앱 시작 → 첫 실행 언어 카드 → 탭 이동(지도/방/설정) → 방 만들기 다이얼로그 → 저장된 공유 상태 복원 → 크래시 기록/안내 창
 - legacy 그래픽 모드에서는 이 오류가 그냥 넘어가므로, 테스트는 반드시 NATIVE 모드로 돌린다
+
+## v1.0.7 — 방장 내보내기 + 지도 아래 채팅 + 실기기 버그 2건 (2026-11-27)
+
+**요청**: 실기기 테스트 화면(방 탭 `3명이 공유 중`: 테스트방·Ddd·구형폰)과 함께
+`"여기서 방장이내보내기기능있으면좋겠어"` · `"그리고 채팅창을 지도밑으로해줘"` +
+같은 테스트에서 발견된 버그 2건(네이버 지도 멤버 핀 미표시, 3버튼 바 폰에서 하단 탭 사라짐).
+
+### 1. 방장 내보내기 (서버 + 앱)
+
+- **방장 식별**: 방을 만들 때 `rooms/{code}` 에 `hostDeviceId` 를 저장합니다. v1.0.6 까지 만든 옛 방(필드 없음)은 **그 방을 만든 기기만** 방장으로 보고, 그 기기가 앱을 열면 `hostDeviceId` 를 한 번 채워 넣습니다(`claimHost`, updateMask). 방장을 모르는 기기에서는 아무에게도 내보내기 버튼이 보이지 않습니다.
+- **재입장 차단은 규칙이 합니다**: `rooms/{code}.kickedIds`(문자열 배열, 최대 20)에 들어간 기기는 `members/{deviceId}` 를 **만들 수도 고칠 수도 없습니다**(403). 그래서 내보내진 폰의 위치 공유 타이머(8초)가 그 사이에 자기 문서를 다시 써도 방에 재등장하지 않습니다. 같은 이유로 그 기기의 채팅 쓰기도 403 입니다.
+  - 순서가 중요합니다: **① `kickedIds` PATCH → ② `members/{deviceId}` DELETE**. 반대로 하면 삭제와 다음 업로드 사이에 재등장합니다.
+- **내보내진 폰의 동작**: 방 문서 폴링(공유 중 24초, 숨김 20초)에서 자기 ID 를 발견하면 즉시 포그라운드 서비스를 멈추고 내 멤버 문서를 지운 뒤 방에서 나가고, `"방장에 의해 방에서 나갔어요"` 안내 창을 한 번 보여 줍니다(`PinSession.onKickedOut` → `consumeKickedNotice`).
+- **화면**: 멤버 행 닉네임 옆 `방장` 배지(내 행 포함), 방장에게만 **다른 멤버** 행에 `내보내기` 버튼, 누르면 `"{이름} 님을 방에서 내보낼까요?"` / `취소` / `내보내기` 확인 창.
+- **레거시 규칙 안전성**: `kicked()` 함수는 `exists()` + `'kickedIds' in …` 가드로 옛 방(필드 없음)과 방 문서가 없는 경우에도 오류 없이 `false` 입니다 — 실서버에서 **200** 으로 확인했습니다(회귀 검사로 고정).
+- **데모 모드**: 데모 방에서도 방장(이 기기)이 가상 친구 Mina·Alex 를 내보낼 수 있고, 내보낸 친구는 목록에서 사라집니다.
+
+### 2. 지도 아래 채팅창
+
+- `지도` 탭이 세로로 **지도 영역(weight 1) → 채팅 패널(화면의 33%, 178~300dp)** 로 나뉩니다.
+- 패널: 헤더(제목·인원·안 읽음·`크게 보기`·`접기`), 최근 30건 말풍선(내 것은 골드·남의 것은 유리판+아바타), 입력줄·전송 버튼.
+- 헤더를 누르면 접힙니다(헤더만 남아 지도가 넓어짐). 약속 장소를 고르는 동안에는 패널을 숨겨 지도를 넓게 씁니다.
+- 펼쳐져 있는 동안에는 새 메시지를 **읽음**으로 쳐서 하단 탭·지도 버튼 배지와 같은 상태를 씁니다(`PinSession.setInlineChatOpen`/`markChatSeen`). 지도 탭을 떠나거나 앱이 배경으로 가면 자동으로 내려갑니다.
+- 키보드가 올라오면 콘텐츠만 키보드 높이만큼 올립니다(edge-to-edge 에서 `adjustResize` 가 창을 줄여 주지 않기 때문).
+
+### 3. 실기기 버그 수정
+
+| 증상 | 원인 | 수정 |
+| --- | --- | --- |
+| 네이버 지도에 내 점만 보이고 다른 멤버 핀이 0개 | `NaverMapView.pushMembers` 는 `PinLink.setMembers([{…}])`(배열 리터럴)로 넘기는데 `naver_map.html` 의 `setMembers` 가 무조건 `JSON.parse(json)` → 배열이 `"[object Object]"` 가 되어 `SyntaxError` → `catch` 가 빈 배열로 덮음 | 배열이면(`Array.isArray`) 그대로 받고, 문자열일 때만 파싱. 지도 JS 검사에 **배열 인자 회귀 검사** 7개 추가(v1.0.6 HTML 에서 5개 실패 확인) |
+| 3버튼 내비게이션 바 폰에서 하단 탭이 검은 빈칸 | `BottomNavigationView` 가 시스템 하단 인셋(약 48dp)을 자기 `paddingBottom` 에 더해 64dp 중 대부분이 패딩이 됨 | 탭 바에 자체 인셋 리스너를 달아 패딩을 0 으로 유지, 인셋은 최하단 배너(`adContainer`)에서만 먹음. Robolectric 검사로 인셋 144px 을 넣어도 `paddingBottom == 0`, 높이 64dp, 탭 4개 확인 |
