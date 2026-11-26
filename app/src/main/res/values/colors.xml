@@ -1,32 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- PinLink 팔레트 — 밤 지도 위의 민트 핀. 앱 아이콘(민트 3D 핀 + 딥 네이비)과 같은 색 -->
+<!--
+  PinLink 팔레트 — 딥 옵시디언/차콜 글라스 + 샴페인 골드 · 플래티넘 실버 · 시안 포인트 (v1.0.5 프리미엄 다크).
+  지도 위에 떠 있는 칩은 반투명 다크 글라스(glass) + 1dp 테두리(glass_stroke)로 밝은 지도에서도 선명하게 읽힌다.
+-->
 <resources>
-    <color name="bg">#060B12</color>
-    <color name="surface">#0B1420</color>
-    <color name="surface_alt">#101B29</color>
-    <color name="surface_high">#16233A</color>
-    <color name="outline">#22314A</color>
-    <color name="divider">#141D2B</color>
+    <!-- 바탕 — 깊은 옵시디언 -->
+    <color name="bg">#080B12</color>
+    <color name="surface">#0B0F19</color>
+    <color name="surface_alt">#141B2D</color>
+    <color name="surface_high">#1A2334</color>
+    <color name="outline">#283349</color>
+    <color name="divider">#151C29</color>
 
-    <color name="text_primary">#EAF0FA</color>
-    <color name="text_secondary">#93A4BE</color>
-    <color name="text_tertiary">#63758F</color>
+    <!-- 글자 — 플래티넘 -->
+    <color name="text_primary">#F2F5FA</color>
+    <color name="text_secondary">#A6B1C2</color>
+    <color name="text_tertiary">#6C7A90</color>
 
-    <color name="accent">#2BD9A6</color>
-    <color name="accent_strong">#1FC08F</color>
-    <color name="accent_dim">#0E3A31</color>
-    <color name="accent_soft">#155247</color>
-    <color name="on_accent">#03231C</color>
+    <!-- 포인트 — 샴페인 골드 -->
+    <color name="accent">#E5C158</color>
+    <color name="accent_strong">#D4AF37</color>
+    <color name="accent_dim">#2A2314</color>
+    <color name="accent_soft">#4A3C1E</color>
+    <color name="on_accent">#16110A</color>
 
-    <color name="sky">#4C8DFF</color>
-    <color name="sky_dim">#12294D</color>
+    <!-- 보조 포인트 — 시안 -->
+    <color name="sky">#6FE3FF</color>
+    <color name="sky_dim">#10303B</color>
 
-    <color name="danger">#FF5C72</color>
-    <color name="danger_dim">#3A1620</color>
-    <color name="warn">#FFB020</color>
-    <color name="warn_dim">#3A2B10</color>
+    <color name="danger">#FF6B7A</color>
+    <color name="danger_dim">#33151C</color>
+    <color name="warn">#E8B84B</color>
+    <color name="warn_dim">#33290F</color>
 
-    <color name="nav_bg">#0A111C</color>
-    <color name="hero_start">#123F38</color>
-    <color name="hero_end">#0A1424</color>
+    <color name="nav_bg">#0A0E16</color>
+    <color name="hero_start">#1B2334</color>
+    <color name="hero_end">#0B0F19</color>
+
+    <!-- 지도 위 유리판 -->
+    <color name="glass">#D90D1320</color>
+    <color name="glass_strong">#F20A0E18</color>
+    <color name="glass_stroke">#4DE5C158</color>
+    <color name="platinum">#C9D3E0</color>
 </resources>

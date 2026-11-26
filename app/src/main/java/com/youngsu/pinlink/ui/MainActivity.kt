@@ -38,6 +38,8 @@ import com.youngsu.pinlink.core.ShareMode
 import com.youngsu.pinlink.data.AppPrefs
 import com.youngsu.pinlink.data.PinSession
 import com.youngsu.pinlink.data.Sync
+import com.youngsu.pinlink.data.SyncFailure
+import com.youngsu.pinlink.data.SyncFault
 
 /**
  * PinLink 의 유일한 화면 — 지도 / 방 / 설정 탭과 하단 배너 광고.
@@ -220,6 +222,8 @@ class MainActivity : AppCompatActivity() {
             PinSession.addListener(sessionListener)
             PinSession.setUiVisible(true)
             refreshSoon()
+            // 서버에 없던 방을 되살렸으면 한 번 알려 준다
+            if (PinSession.consumeRoomRepaired()) toast(getString(R.string.toast_room_restored))
             main.removeCallbacks(updater)
             main.post(updater)
         }
@@ -288,7 +292,7 @@ class MainActivity : AppCompatActivity() {
                     if (ok) {
                         onRoomEntered(getString(R.string.toast_joined))
                     } else {
-                        toast(getString(R.string.err_create_failed))
+                        toastFault(getString(R.string.err_create_failed), PinSession.lastFault)
                     }
                 }
             }
@@ -306,12 +310,12 @@ class MainActivity : AppCompatActivity() {
                     PinSession.joinRoom(code, name, color, startSharing = granted) { ok, error ->
                         if (ok) {
                             onRoomEntered(getString(R.string.toast_joined))
+                        } else if (error == "notfound") {
+                            toast(getString(R.string.err_room_not_found))
+                        } else if (error == "network") {
+                            toastFault(getString(R.string.err_network), PinSession.lastFault)
                         } else {
-                            toast(
-                                getString(
-                                    if (error == "notfound") R.string.err_room_not_found else R.string.err_join_failed
-                                )
-                            )
+                            toastFault(getString(R.string.err_join_failed), PinSession.lastFault)
                         }
                     }
                 }
@@ -577,6 +581,25 @@ class MainActivity : AppCompatActivity() {
 
     fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * 실패 안내 — 기본 문구 아래에 사유 한 줄을 붙인다.
+     * v1.0.4 까지는 403(권한)도 404(방 없음)도 네트워크 문제도 모두 "서버에 연결하지 못했어요" 하나로 보여 줘서
+     * 원인을 알 수 없었다.
+     */
+    fun toastFault(base: String, fault: SyncFault?) {
+        val detail = fault?.let { getString(faultLabel(it), it.httpCode) }
+        toast(if (detail.isNullOrBlank()) base else "$base\n$detail")
+    }
+
+    private fun faultLabel(fault: SyncFault): Int = when (fault.failure) {
+        SyncFailure.OFFLINE -> R.string.fault_offline
+        SyncFailure.DENIED -> R.string.fault_denied
+        SyncFailure.MISSING -> R.string.fault_missing
+        SyncFailure.BAD_REQUEST -> R.string.fault_bad
+        SyncFailure.SERVER -> R.string.fault_server
+        SyncFailure.UNKNOWN -> R.string.fault_unknown
     }
 
     private fun dp(value: Float): Int = (value * resources.displayMetrics.density + 0.5f).toInt()

@@ -43,6 +43,24 @@ class AppPrefs private constructor(context: Context) {
         get() = prefs.getBoolean(KEY_ROOM_OWNER, false)
         set(value) = prefs.edit().putBoolean(KEY_ROOM_OWNER, value).apply()
 
+    /** 방을 만든 시각 — 서버에서 방 문서가 사라졌을 때 같은 문서로 되살리는 데 쓴다 */
+    var roomCreatedAt: Long
+        get() = prefs.getLong(KEY_ROOM_CREATED_AT, 0L)
+        set(value) = prefs.edit().putLong(KEY_ROOM_CREATED_AT, value).apply()
+
+    /** 이 자리에 머물기 시작한 시각과 그 기준 좌표 — 앱을 꺼도 체류 시간이 이어진다 */
+    var staySince: Long
+        get() = prefs.getLong(KEY_STAY_SINCE, 0L)
+        set(value) = prefs.edit().putLong(KEY_STAY_SINCE, value).apply()
+
+    var stayLat: Double
+        get() = java.lang.Double.longBitsToDouble(prefs.getLong(KEY_STAY_LAT, 0L))
+        set(value) = prefs.edit().putLong(KEY_STAY_LAT, java.lang.Double.doubleToRawLongBits(value)).apply()
+
+    var stayLng: Double
+        get() = java.lang.Double.longBitsToDouble(prefs.getLong(KEY_STAY_LNG, 0L))
+        set(value) = prefs.edit().putLong(KEY_STAY_LNG, java.lang.Double.doubleToRawLongBits(value)).apply()
+
     /** 마지막으로 고른 지도 스타일 (dark / light) */
     var mapStyle: String
         get() = prefs.getString(KEY_MAP_STYLE, "dark").orEmpty()
@@ -71,6 +89,7 @@ class AppPrefs private constructor(context: Context) {
         prefs.edit()
             .remove(KEY_ROOM)
             .remove(KEY_ROOM_OWNER)
+            .remove(KEY_ROOM_CREATED_AT)
             .putLong(KEY_STARTED_AT, 0L)
             .putLong(KEY_EXPIRES_AT, 0L)
             .putString(KEY_MODE, ShareMode.ALWAYS.id)
@@ -84,6 +103,10 @@ class AppPrefs private constructor(context: Context) {
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_ROOM = "room_code"
         private const val KEY_ROOM_OWNER = "room_owner"
+        private const val KEY_ROOM_CREATED_AT = "room_created_at"
+        private const val KEY_STAY_SINCE = "stay_since"
+        private const val KEY_STAY_LAT = "stay_lat"
+        private const val KEY_STAY_LNG = "stay_lng"
         private const val KEY_MAP_STYLE = "map_style"
         private const val KEY_MODE = "share_mode"
         private const val KEY_STARTED_AT = "started_at"

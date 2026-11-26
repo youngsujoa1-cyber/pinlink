@@ -44,7 +44,7 @@
     <string name="btn_copy">复制</string>
     <string name="btn_share">分享</string>
     <string name="code_copied">已复制房间码</string>
-    <string name="invite_message">在 PinLink 里查看我的实时位置。房间码：%1$s</string>
+    <string name="invite_message">在 PinLink 里查看我的实时位置。房间码：%1$s\n下载应用：https://play.google.com/store/apps/details?id=com.youngsu.pinlink</string>
     <string name="share_chooser_title">分享房间码</string>
     <string name="members_title">本房间成员</string>
     <string name="members_count">%1$d 人在共享</string>
@@ -150,4 +150,31 @@
     <string name="last_crash_copy">复制</string>
     <string name="crash_copied">已复制</string>
     <string name="close">关闭</string>
+
+    <string name="speed_kmh">%1$d km/h</string>
+    <string name="speed_idle">静止</string>
+    <string name="err_meeting_save">无法保存集合地点。</string>
+    <string name="toast_room_restored">服务器上没有该房间信息，已重新创建。</string>
+    <string name="fault_offline">请检查网络连接。</string>
+    <string name="fault_denied">服务器拒绝了请求（权限 403）。</string>
+    <string name="fault_missing">服务器上没有该信息（404）。</string>
+    <string name="fault_bad">请求有误（%1$d）。</string>
+    <string name="fault_server">服务器出现问题（%1$d）。</string>
+    <string name="fault_unknown">未知错误（%1$d）。</string>
+    <string name="settings_diag">同步诊断</string>
+    <string name="settings_diag_ok">服务器连接正常</string>
+    <string name="settings_diag_last">最后的错误 · %1$s</string>
+    <string name="settings_diag_log">最近的通信记录</string>
+    <string name="settings_diag_copy">复制记录</string>
+    <string name="settings_diag_clear">清除记录</string>
+    <string name="settings_diag_check">重新检查服务器</string>
+    <string name="settings_diag_checking">检查中…</string>
+    <string name="settings_diag_empty">没有记录</string>
+    <string name="settings_sync_room_ok">房间信息：服务器上存在</string>
+    <string name="settings_sync_room_missing">房间信息：服务器上不存在</string>
+    <string name="stay_just">刚到</string>
+    <string name="stay_min">已停留 %1$d 分钟</string>
+    <string name="stay_hour">已停留 %1$d 小时 %2$d 分</string>
+    <string name="stay_short_min">%1$d 分钟</string>
+    <string name="stay_short_hour">%1$d 小时</string>
 </resources>

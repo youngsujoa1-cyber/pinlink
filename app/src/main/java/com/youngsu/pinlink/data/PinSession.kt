@@ -60,7 +60,28 @@ object PinSession {
     @Volatile var meeting: MeetingPoint? = null
         private set
 
-    @Volatile var lastError: String? = null
+    /** 마지막 실패 — 화면·설정의 진단에 그대로 보여 준다 (성공하면 지워진다) */
+    @Volatile var lastFault: SyncFault? = null
+        private set
+
+    /** 마지막 실패를 남긴 동작 (예: "약속", "멤버 올리기") */
+    @Volatile var lastFaultAt: String = ""
+        private set
+
+    /** 서버에 없던 방을 이번 실행에서 되살렸는가 (한 번만 알려 주려고) */
+    @Volatile var roomRepaired: Boolean = false
+        private set
+
+    /** 마지막 확인 결과 — 방 문서가 서버에 있는가 (null = 아직 모름) */
+    @Volatile var roomOnServer: Boolean? = null
+        private set
+
+    /** 내 이동 속도(km/h) — 2km/h 미만은 0 */
+    @Volatile var mySpeedKmh: Double = 0.0
+        private set
+
+    /** 내가 이 자리에 머물기 시작한 시각(ms) — 정지해 있을 때 지도에 '12분째'로 뜬다 */
+    @Volatile var myStaySince: Long = 0L
         private set
 
     @Volatile var busy: Boolean = false
@@ -75,6 +96,8 @@ object PinSession {
     @Volatile private var started = false
 
     private var locationManager: LocationManager? = null
+    private var previousFix: Fix? = null
+    private var stayAnchor: Fix? = null
 
     val demo: Boolean get() = Sync.isDemo
 
@@ -87,6 +110,12 @@ object PinSession {
         roomCode = prefs.roomCode
         roomOwner = prefs.roomOwner
         battery = readBattery()
+        SyncLog.init(app)
+        // 앱을 꺼다 켜도 '여기서 얼마나 있었는지'가 이어지도록 저장해 둔 기준을 읽는다
+        myStaySince = prefs.staySince
+        if (prefs.stayLat != 0.0 || prefs.stayLng != 0.0) {
+            stayAnchor = Fix(prefs.stayLat, prefs.stayLng)
+        }
         Sync.demoEngine?.anchor = DemoEngine.DEFAULT_ANCHOR
         main.post(ticker)
         // 앱을 다시 켰을 때: 공유 중이던 방이 아직 살아 있으면 서비스도 함께 되살린다
@@ -96,6 +125,10 @@ object PinSession {
                 if (PinLogic.isExpired(prefs.expiresAt, System.currentTimeMillis())) expireSharing()
                 else startService()
             }
+            // 방 문서가 서버에 그대로 있는지 먼저 확인한다.
+            // (v1.0.4 는 이 확인이 없어서, 서버에서 사라진 방 코드를 그대로 띄운 채
+            //  약속 장소를 찍을 때마다 403 → "서버에 연결하지 못했어요"가 떴다)
+            verifyRoom(recreate = true)
             refreshMembers()
             refreshRoom()
         }
@@ -142,6 +175,10 @@ object PinSession {
 
     // -------------------------------------------------------------------- 방
 
+    /**
+     * 방 만들기 — 결과는 (성공 여부, 실패 사유 코드) 로 돌려준다.
+     * 사유 코드: "create"(만들지 못함) · "offline"(서버에 닿지 못함)
+     */
     fun createRoom(name: String, color: String, startSharing: Boolean, onDone: (Boolean, String?) -> Unit) {
         if (busy) return
         busy = true
@@ -151,17 +188,29 @@ object PinSession {
 
     private fun tryNewRoom(attempt: Int, startSharing: Boolean, onDone: (Boolean, String?) -> Unit) {
         val code = PinLogic.newRoomCode()
-        engine.fetchRoom(code) { existing ->
-            if (existing != null) {
-                if (attempt < 3) tryNewRoom(attempt + 1, startSharing, onDone)
-                else finishCreate(false, startSharing, onDone)
-                return@fetchRoom
-            }
-            engine.createRoom(code, myName, System.currentTimeMillis()) { ok ->
-                if (ok) {
-                    enterRoom(code, owner = true, startSharing = startSharing)
+        engine.fetchRoom(code) { lookup ->
+            when (lookup) {
+                is RoomLookup.Found -> {
+                    // 이미 누가 쓰는 코드 — 다른 코드로 다시
+                    if (attempt < 3) tryNewRoom(attempt + 1, startSharing, onDone)
+                    else finishCreate(false, startSharing, onDone)
                 }
-                finishCreate(ok, startSharing, onDone)
+                is RoomLookup.Failed -> {
+                    // 서버에 닿지 못했으면 코드를 바꿔 가며 재시도하지 않는다 (같은 결과)
+                    noteFault("방 만들기", lookup.fault)
+                    finishCreate(false, startSharing, onDone)
+                }
+                is RoomLookup.Missing -> {
+                    val createdAt = System.currentTimeMillis()
+                    engine.createRoom(code, myName, createdAt) { fault ->
+                        if (fault == null) {
+                            enterRoom(code, owner = true, startSharing = startSharing, createdAt = createdAt)
+                        } else {
+                            noteFault("방 만들기", fault)
+                        }
+                        finishCreate(fault == null, startSharing, onDone)
+                    }
+                }
             }
         }
     }
@@ -176,30 +225,114 @@ object PinSession {
         if (busy) return
         busy = true
         saveProfile(name, color)
-        engine.fetchRoom(code) { room ->
-            if (room == null && !demo) {
-                busy = false
-                notifyChanged()
-                onDone(false, "notfound")
-                return@fetchRoom
+        engine.fetchRoom(code) { lookup ->
+            when (lookup) {
+                is RoomLookup.Failed -> {
+                    noteFault("방 참여", lookup.fault)
+                    busy = false
+                    notifyChanged()
+                    onDone(false, "network")
+                }
+                is RoomLookup.Missing -> {
+                    if (!demo) {
+                        busy = false
+                        notifyChanged()
+                        onDone(false, "notfound")
+                    } else {
+                        // 데모: 서버가 없으니 들어가려는 코드를 그 자리에서 데모 방으로 연다
+                        engine.createRoom(code, "demo", System.currentTimeMillis()) { }
+                        enterRoom(code, owner = false, startSharing = startSharing)
+                        busy = false
+                        notifyChanged()
+                        onDone(true, null)
+                    }
+                }
+                is RoomLookup.Found -> {
+                    enterRoom(code, owner = false, startSharing = startSharing, createdAt = lookup.room.createdAt)
+                    meeting = lookup.room.meeting
+                    busy = false
+                    notifyChanged()
+                    onDone(true, null)
+                }
             }
-            if (room == null) {
-                // 데모: 서버가 없으니 들어가려는 코드를 그 자리에서 데모 방으로 연다
-                engine.createRoom(code, "demo", System.currentTimeMillis()) { }
-            }
-            enterRoom(code, owner = false, startSharing = startSharing)
-            meeting = room?.meeting
-            busy = false
-            notifyChanged()
-            onDone(true, null)
         }
     }
 
-    private fun enterRoom(code: String, owner: Boolean, startSharing: Boolean) {
+    /** 방을 만들거나 들어간 뒤 — 서버에 방 문서가 실제로 있는지 한 번 더 확인한다 */
+    fun verifyRoom(recreate: Boolean = true, onDone: ((SyncFault?, Boolean) -> Unit)? = null) {
+        val code = roomCode
+        if (code.isEmpty()) {
+            onDone?.invoke(null, false)
+            return
+        }
+        engine.fetchRoom(code) { lookup ->
+            when (lookup) {
+                is RoomLookup.Found -> {
+                    roomOnServer = true
+                    clearFault()
+                    onDone?.invoke(null, false)
+                }
+                is RoomLookup.Failed -> {
+                    // 확인 자체를 못했으면 '없다'고 단정하지 않는다
+                    noteFault("방 확인", lookup.fault)
+                    onDone?.invoke(lookup.fault, false)
+                }
+                is RoomLookup.Missing -> {
+                    roomOnServer = false
+                    if (!recreate) {
+                        onDone?.invoke(null, false)
+                        return@fetchRoom
+                    }
+                    SyncLog.record("방 확인", "rooms/$code 문서 없음 → 다시 만듭니다")
+                    engine.ensureRoom(roomSeed(code)) { fault ->
+                        if (fault == null) {
+                            roomOnServer = true
+                            roomRepaired = true
+                            clearFault()
+                        } else {
+                            noteFault("방 되살리기", fault)
+                        }
+                        notifyChanged()
+                        onDone?.invoke(fault, fault == null)
+                    }
+                }
+            }
+        }
+    }
+
+    /** 되살리기 알림을 한 번만 보여 주려고 플래그를 내린다 */
+    fun consumeRoomRepaired(): Boolean {
+        val repaired = roomRepaired
+        roomRepaired = false
+        return repaired
+    }
+
+    private fun roomSeed(code: String = roomCode): RoomSeed {
+        val createdAt = prefs.roomCreatedAt.takeIf { it > 0L }
+            ?: prefs.startedAt.takeIf { it > 0L }
+            ?: System.currentTimeMillis()
+        return RoomSeed(code, prefs.nickname.ifBlank { myName }, createdAt)
+    }
+
+    private fun noteFault(where: String, fault: SyncFault) {
+        lastFault = fault
+        lastFaultAt = where
+        SyncLog.record("실패 · $where", fault.logText)
+    }
+
+    private fun clearFault() {
+        lastFault = null
+        lastFaultAt = ""
+    }
+
+    private fun enterRoom(code: String, owner: Boolean, startSharing: Boolean, createdAt: Long = System.currentTimeMillis()) {
         roomCode = code
         roomOwner = owner
+        roomRepaired = false
+        roomOnServer = true
         prefs.roomCode = code
         prefs.roomOwner = owner
+        prefs.roomCreatedAt = createdAt
         reportedHidden = false
         lastUploadAt = 0L
         lastPollAt = 0L
@@ -222,6 +355,11 @@ object PinSession {
         roomOwner = false
         members = emptyList()
         meeting = null
+        mySpeedKmh = 0.0
+        myStaySince = 0L
+        stayAnchor = null
+        previousFix = null
+        roomOnServer = null
         prefs.clearRoom()
         applyLocation()
         notifyChanged()
@@ -269,18 +407,25 @@ object PinSession {
 
     // ------------------------------------------------------------------ 약속 장소
 
-    fun setMeeting(point: MeetingPoint?, onDone: (Boolean) -> Unit) {
+    /**
+     * 약속 장소 저장 — 실패하면 이유([SyncFault])를 그대로 돌려준다.
+     * 서버에 방 문서가 없으면 먼저 되살린 뒤 저장한다(CloudEngine.setMeeting → ensureRoom).
+     */
+    fun setMeeting(point: MeetingPoint?, onDone: (SyncFault?) -> Unit) {
         if (roomCode.isEmpty()) {
             meeting = point
-            onDone(true)
+            onDone(null)
             return
         }
-        engine.setMeeting(roomCode, point) { ok ->
-            if (ok) {
+        engine.setMeeting(roomSeed(), point) { fault ->
+            if (fault == null) {
                 meeting = point
+                clearFault()
                 notifyChanged()
+            } else {
+                noteFault("약속", fault)
             }
-            onDone(ok)
+            onDone(fault)
         }
     }
 
@@ -288,15 +433,36 @@ object PinSession {
 
     fun onLocation(location: Location) {
         val previous = myFix
+        val rawSpeedMps = if (location.hasSpeed()) location.speed.toDouble() else null
         val fix = Fix(
             lat = location.latitude,
             lng = location.longitude,
-            speedMps = if (location.hasSpeed()) location.speed.toDouble() else 0.0,
+            speedMps = rawSpeedMps ?: 0.0,
             accuracyMeters = if (location.hasAccuracy()) location.accuracy.toDouble() else 0.0,
             at = System.currentTimeMillis()
         )
         if (!fix.valid) return
+        // 속도: GPS 가 주면 그대로, 아니면 두 측정값 사이 거리·시간으로 계산한다.
+        // 2km/h 미만(GPS 흔들림)은 0 = 정지로 본다.
+        val speedKmh = if (rawSpeedMps != null && rawSpeedMps >= 0.0) {
+            PinLogic.speedKmh(rawSpeedMps)
+        } else {
+            PinLogic.speedKmhBetween(previousFix, fix)
+        }
+        previousFix = fix
         myFix = fix
+        mySpeedKmh = speedKmh
+        // 체류 시간: 70m 넘게 벗어나거나 움직이기 시작하면 '지금'으로 다시 잡는다
+        val nextStay = PinLogic.nextStaySince(myStaySince, stayAnchor, fix, speedKmh)
+        if (nextStay != myStaySince) {
+            myStaySince = nextStay
+            prefs.staySince = nextStay
+        }
+        if (myStaySince == fix.at) {
+            stayAnchor = fix
+            prefs.stayLat = fix.lat
+            prefs.stayLng = fix.lng
+        }
         Sync.demoEngine?.anchor = fix
         if (previous == null || previous.at <= 0L) notifyChanged()
         if (isSharingNow() && System.currentTimeMillis() - lastUploadAt >= UPLOAD_MS) {
@@ -319,9 +485,11 @@ object PinSession {
             lat = fix.lat,
             lng = fix.lng,
             battery = readBattery(),
-            moving = movingFrom(null, fix),
+            moving = movingFrom(null, fix) || PinLogic.isMovingAt(mySpeedKmh),
             updatedAt = now,
             sharing = !hidden,
+            speedKmh = if (hidden) 0.0 else mySpeedKmh,
+            staySince = if (myStaySince > 0L) myStaySince else now,
             mine = true
         )
     }
@@ -330,8 +498,12 @@ object PinSession {
         if (roomCode.isEmpty()) return
         val member = myMember(hidden) ?: return
         lastUploadAt = System.currentTimeMillis()
-        engine.upload(roomCode, member) { ok ->
-            if (!ok && !demo) lastError = "upload"
+        engine.upload(roomCode, member) { fault ->
+            if (fault != null && !demo) {
+                noteFault("멤버 올리기", fault)
+            } else if (fault == null && lastFaultAt == "멤버 올리기") {
+                clearFault()
+            }
             notifyChanged()
         }
     }
@@ -340,12 +512,11 @@ object PinSession {
     fun refreshMembers() {
         if (roomCode.isEmpty()) return
         lastPollAt = System.currentTimeMillis()
-        engine.members(roomCode) { list ->
+        engine.members(roomCode) { list, fault ->
             if (list != null) {
                 members = list.filter { it.id != prefs.deviceId }.sortedBy { it.name.lowercase() }
-                lastError = null
-            } else if (!demo) {
-                lastError = "members"
+            } else if (fault != null && !demo) {
+                noteFault("멤버 받기", fault)
             }
             notifyChanged()
         }
@@ -354,8 +525,12 @@ object PinSession {
     /** 방 문서에서 약속 장소를 받는다 (다른 멤버가 찍었을 수 있다) */
     fun refreshRoom() {
         if (roomCode.isEmpty()) return
-        engine.fetchRoom(roomCode) { room ->
-            if (room != null) meeting = room.meeting
+        engine.fetchRoom(roomCode) { lookup ->
+            when (lookup) {
+                is RoomLookup.Found -> meeting = lookup.room.meeting
+                is RoomLookup.Missing -> if (!demo) verifyRoom(recreate = true)
+                is RoomLookup.Failed -> if (!demo) noteFault("방 확인", lookup.fault)
+            }
             notifyChanged()
         }
     }

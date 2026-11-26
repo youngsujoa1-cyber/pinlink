@@ -46,6 +46,7 @@ class MapScreen(private val host: MainActivity) {
     private val topBar: LinearLayout = Ui.column(act)
     private val demoBanner: TextView
     private val statusPill: TextView
+    private val speedPill: TextView
     private val sourceBadge: TextView
     private val attribution: TextView
     private val codeChip: TextView
@@ -103,7 +104,7 @@ class MapScreen(private val host: MainActivity) {
             setPadding(act.dp(10f), act.dp(6f), act.dp(10f), act.dp(6f))
             visibility = if (PinSession.demo) View.VISIBLE else View.GONE
         }
-        topBar.setPadding(act.dp(12f), act.dp(12f), act.dp(12f), 0)
+        topBar.setPadding(act.dp(12f), act.dp(14f), act.dp(12f), 0)
         live.addView(topBar, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { gravity = Gravity.TOP })
@@ -111,9 +112,9 @@ class MapScreen(private val host: MainActivity) {
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { bottomMargin = act.dp(8f) })
 
-        statusPill = Ui.pill(act, "", act.getColor(R.color.accent_dim), act.getColor(R.color.accent))        // 우상단: 밝은/어두운 지도 1탭 전환
+        statusPill = Ui.glassPill(act, "", act.getColor(R.color.accent), 10.5f)        // 우상단: 밝은/어두운 지도 1탭 전환
         styleButton = FrameLayout(act).apply {
-            background = Ui.rounded(act, act.getColor(R.color.surface_high), 999f, act.getColor(R.color.outline))
+            background = Ui.glass(act)
             addView(
                 Ui.icon(act, R.drawable.ic_layers, 17f, act.getColor(R.color.accent)),
                 FrameLayout.LayoutParams(act.dp(17f), act.dp(17f)).apply { gravity = Gravity.CENTER }
@@ -122,14 +123,19 @@ class MapScreen(private val host: MainActivity) {
             Ui.clickable(this) { toggleMapStyle() }
         }
 
-        codeChip = Ui.pill(act, "", act.getColor(R.color.surface_high), act.getColor(R.color.text_primary)).apply {
+        codeChip = Ui.glassPill(act, "", act.getColor(R.color.platinum), 11f).apply {
             typeface = Typeface.create("monospace", Typeface.BOLD)
             letterSpacing = 0.14f
             setPadding(act.dp(11f), act.dp(5f), act.dp(11f), act.dp(5f))
             Ui.clickable(this) { host.copyRoomCode() }
         }
+        // 내 이동 속도 — 서 있는 동안은 '정지'로 조용하게, 달리는 동안은 골드 숫자로
+        speedPill = Ui.glassPill(act, act.getString(R.string.speed_idle), act.getColor(R.color.text_tertiary), 10.5f).apply {
+            setPadding(act.dp(10f), act.dp(5f), act.dp(10f), act.dp(5f))
+            visibility = View.GONE
+        }
         // 우측 상단: 지금 떠 있는 지도 (NAVER / CARTO)
-        sourceBadge = Ui.pill(act, MapSource.CARTO.label, act.getColor(R.color.surface_high), act.getColor(R.color.text_secondary), 9.5f).apply {
+        sourceBadge = Ui.glassPill(act, MapSource.CARTO.label, act.getColor(R.color.text_secondary), 9.5f).apply {
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             letterSpacing = 0.08f
             setPadding(act.dp(9f), act.dp(4f), act.dp(9f), act.dp(4f))
@@ -138,6 +144,9 @@ class MapScreen(private val host: MainActivity) {
         val chipLine = Ui.row(act).apply {
             addView(statusPill)
             addView(codeChip, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { leftMargin = act.dp(7f) })
+            addView(speedPill, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { leftMargin = act.dp(7f) })
             addView(View(act), LinearLayout.LayoutParams(0, 1).apply { weight = 1f })
@@ -191,7 +200,7 @@ class MapScreen(private val host: MainActivity) {
         ).apply { gravity = Gravity.BOTTOM })
 
         memberCard = Ui.row(act).apply {
-            background = Ui.rounded(act, act.getColor(R.color.surface_alt), 20f, act.getColor(R.color.outline))
+            background = Ui.glass(act, 20f, strong = true)
             setPadding(act.dp(14f), act.dp(12f), act.dp(10f), act.dp(12f))
             visibility = View.GONE
             Ui.clickable(this) { selectedId?.let { id -> PinSession.members.firstOrNull { it.id == id }?.let { focusOn(it) } } }
@@ -244,7 +253,7 @@ class MapScreen(private val host: MainActivity) {
         }
         actionsRow.addView(recenter, LinearLayout.LayoutParams(act.dp(46f), act.dp(46f)))
 
-        emptyHint = Ui.pill(act, act.getString(R.string.map_no_fix), 0xCC0B1420.toInt(), act.getColor(R.color.text_secondary), 11f)
+        emptyHint = Ui.pill(act, act.getString(R.string.map_no_fix), act.getColor(R.color.glass_strong), act.getColor(R.color.platinum), 11f)
         live.addView(emptyHint, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply {
@@ -253,7 +262,7 @@ class MapScreen(private val host: MainActivity) {
         })
 
         // 약속 장소 고르기 모드
-        pickHint = Ui.pill(act, act.getString(R.string.pick_mode_title), 0xEE0B1420.toInt(), act.getColor(R.color.text_primary), 11.5f).apply {
+        pickHint = Ui.pill(act, act.getString(R.string.pick_mode_title), act.getColor(R.color.glass_strong), act.getColor(R.color.text_primary), 11.5f).apply {
             gravity = Gravity.CENTER
             setPadding(act.dp(12f), act.dp(8f), act.dp(12f), act.dp(8f))
             visibility = View.GONE
@@ -311,9 +320,25 @@ class MapScreen(private val host: MainActivity) {
         statusPill.setTextColor(act.getColor(if (sharing) R.color.accent else R.color.text_secondary))
         statusPill.background = GradientDrawable().apply {
             cornerRadius = act.dpf(999f)
-            setColor(act.getColor(if (sharing) R.color.accent_dim else R.color.surface_high))
+            setColor(act.getColor(if (sharing) R.color.glass_strong else R.color.glass))
+            setStroke(act.dp(1f), act.getColor(if (sharing) R.color.glass_stroke else R.color.outline))
         }
         codeChip.text = PinSession.roomCode
+
+        // 내 속도 — 서 있는 동안은 '몇 분째 머무는지'로 바뀐다
+        val mySpeed = PinLogic.speedLabelValue(PinSession.mySpeedKmh)
+        if (myFix == null) {
+            speedPill.visibility = View.GONE
+        } else {
+            speedPill.visibility = View.VISIBLE
+            if (mySpeed > 0) {
+                speedPill.text = act.getString(R.string.speed_kmh, mySpeed)
+                speedPill.setTextColor(act.getColor(R.color.accent))
+            } else {
+                speedPill.text = stayText(act, PinSession.myStaySince, System.currentTimeMillis(), short = true)
+                speedPill.setTextColor(act.getColor(R.color.text_secondary))
+            }
+        }
 
         val newSignature = buildString {
             append(PinSession.roomCode).append('|')
@@ -363,6 +388,10 @@ class MapScreen(private val host: MainActivity) {
         if (myLat != null && myLng != null) {
             parts.add(PinLogic.formatDistance(PinLogic.distanceMeters(myLat, myLng, member.lat, member.lng)))
         }
+        // 이동 중이면 속도, 서 있으면 '몇 분째 머무는지'
+        val speed = PinLogic.speedLabelValue(member.speedKmh)
+        if (speed > 0) parts.add(act.getString(R.string.speed_kmh, speed))
+        else if (member.staySince > 0L) parts.add(stayText(act, member.staySince, now))
         if (member.battery in 0..100) parts.add(act.getString(R.string.member_battery, member.battery))
         parts.add(act.getString(if (member.moving) R.string.state_moving else R.string.state_stopped))
         return parts.joinToString(" · ")
@@ -436,12 +465,16 @@ class MapScreen(private val host: MainActivity) {
     private fun showSource(source: MapSource) {
         val naverOn = source == MapSource.NAVER
         sourceBadge.text = source.label
-        sourceBadge.setTextColor(act.getColor(if (naverOn) R.color.accent else R.color.text_secondary))
+        sourceBadge.setTextColor(act.getColor(if (naverOn) R.color.sky else R.color.text_secondary))
         sourceBadge.background = GradientDrawable().apply {
             cornerRadius = act.dpf(999f)
-            setColor(act.getColor(if (naverOn) R.color.accent_dim else R.color.surface_high))
+            setColor(act.getColor(R.color.glass))
+            setStroke(act.dp(1f), act.getColor(if (naverOn) R.color.sky else R.color.outline))
         }
         attribution.text = if (naverOn) act.getString(R.string.map_attribution_naver) else cartoAttribution()
+        // 네이버 지도는 SDK 가 자기 로고·저작권을 직접 그린다 — 앱이 한 번 더 쓰면
+        // 상단 칩(공유 중·코드)과 글자가 겹쳐 보이므로 네이버일 때는 앱 쪽 문구를 감춘다
+        attribution.visibility = if (naverOn) View.GONE else View.VISIBLE
         // 네이버 지도는 아래 왼쪽에 로고를 그린다 — 버튼에 가리지 않게 아래 여백을 조금 더 준다
         bottomBar.setPadding(act.dp(12f), 0, act.dp(12f), act.dp(if (naverOn) 34f else 14f))
     }
@@ -455,8 +488,9 @@ class MapScreen(private val host: MainActivity) {
         if (!PinSession.hasRoom() || pickMode) return
         Dialogs.showMeetingName(act) { name ->
             val point = MeetingPoint(lat, lng, name, PinSession.myName, System.currentTimeMillis())
-            PinSession.setMeeting(point) { ok ->
-                host.toast(act.getString(if (ok) R.string.toast_meeting_set else R.string.err_network))
+            PinSession.setMeeting(point) { fault ->
+                if (fault == null) host.toast(act.getString(R.string.toast_meeting_set))
+                else host.toastFault(act.getString(R.string.err_meeting_save), fault)
                 refresh()
             }
         }
@@ -497,10 +531,9 @@ class MapScreen(private val host: MainActivity) {
         cancelPick()
         Dialogs.showMeetingName(act) { name ->
             val point = MeetingPoint(lat, lng, name, PinSession.myName, System.currentTimeMillis())
-            PinSession.setMeeting(point) { ok ->
-                host.toast(
-                    act.getString(if (ok) R.string.toast_meeting_set else R.string.err_network)
-                )
+            PinSession.setMeeting(point) { fault ->
+                if (fault == null) host.toast(act.getString(R.string.toast_meeting_set))
+                else host.toastFault(act.getString(R.string.err_meeting_save), fault)
                 refresh()
             }
         }
@@ -628,7 +661,7 @@ class MapScreen(private val host: MainActivity) {
 
     private fun actionPill(iconRes: Int, label: String, onClick: () -> Unit): LinearLayout =
         Ui.row(act).apply {
-            background = Ui.rounded(act, act.getColor(R.color.surface_alt), 999f, act.getColor(R.color.outline))
+            background = Ui.glass(act)
             setPadding(act.dp(14f), 0, act.dp(16f), 0)
             addView(Ui.icon(act, iconRes, 18f, act.getColor(R.color.accent)), LinearLayout.LayoutParams(act.dp(18f), act.dp(18f)).apply {
                 rightMargin = act.dp(7f)
@@ -639,7 +672,7 @@ class MapScreen(private val host: MainActivity) {
 
     private fun circleButton(iconRes: Int, description: String, onClick: () -> Unit): FrameLayout =
         FrameLayout(act).apply {
-            background = Ui.rounded(act, act.getColor(R.color.surface_alt), 999f, act.getColor(R.color.outline))
+            background = Ui.glass(act)
             addView(
                 Ui.icon(act, iconRes, 21f, act.getColor(R.color.accent)).apply { contentDescription = description },
                 FrameLayout.LayoutParams(act.dp(21f), act.dp(21f)).apply { gravity = Gravity.CENTER }

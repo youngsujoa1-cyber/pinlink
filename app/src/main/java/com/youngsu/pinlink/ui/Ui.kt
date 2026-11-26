@@ -183,6 +183,26 @@ object Ui {
             letterSpacing = 0.04f
         }
 
+    /**
+     * 지도 위에 떠 있는 유리판 — 반투명 차콜 + 1dp 샴페인 테두리.
+     * 밝은 지도 위에서도 칩이 또렷하게 읽히도록 v1.0.5 에서 도입했다.
+     */
+    fun glass(context: Context, radiusDp: Float = 999f, strong: Boolean = false): GradientDrawable =
+        GradientDrawable().apply {
+            cornerRadius = context.dpf(radiusDp)
+            setColor(context.getColor(if (strong) R.color.glass_strong else R.color.glass))
+            setStroke(context.dp(1f), context.getColor(R.color.glass_stroke))
+        }
+
+    /** 유리 칩 — 투명한 바탕에 1dp 테두리 */
+    fun glassPill(context: Context, value: CharSequence, @ColorInt fg: Int, sizeSp: Float = 11f): TextView =
+        text(context, value, sizeSp, fg, bold = true).apply {
+            gravity = Gravity.CENTER
+            setPadding(context.dp(10f), context.dp(5f), context.dp(10f), context.dp(5f))
+            background = glass(context)
+            letterSpacing = 0.03f
+        }
+
     fun spacing(context: Context, heightDp: Float): View = View(context).apply {
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, context.dp(heightDp))
     }

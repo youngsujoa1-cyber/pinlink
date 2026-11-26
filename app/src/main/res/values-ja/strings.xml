@@ -44,7 +44,7 @@
     <string name="btn_copy">コピー</string>
     <string name="btn_share">共有</string>
     <string name="code_copied">ルームコードをコピーしました</string>
-    <string name="invite_message">PinLink で私のリアルタイム位置を見られます。ルームコード: %1$s</string>
+    <string name="invite_message">PinLink で私のリアルタイム位置を見られます。ルームコード: %1$s\nアプリをダウンロード: https://play.google.com/store/apps/details?id=com.youngsu.pinlink</string>
     <string name="share_chooser_title">ルームコードを共有</string>
     <string name="members_title">このルームのメンバー</string>
     <string name="members_count">%1$d人が共有中</string>
@@ -150,4 +150,31 @@
     <string name="last_crash_copy">コピー</string>
     <string name="crash_copied">コピーしました</string>
     <string name="close">閉じる</string>
+
+    <string name="speed_kmh">%1$d km/h</string>
+    <string name="speed_idle">停止</string>
+    <string name="err_meeting_save">待ち合わせ場所を保存できませんでした。</string>
+    <string name="toast_room_restored">サーバーに無かったルーム情報を作り直しました。</string>
+    <string name="fault_offline">インターネット接続を確認してください。</string>
+    <string name="fault_denied">サーバーがリクエストを拒否しました（権限 403）。</string>
+    <string name="fault_missing">サーバーにその情報がありません（404）。</string>
+    <string name="fault_bad">リクエストが正しくありません（%1$d）。</string>
+    <string name="fault_server">サーバーに問題があります（%1$d）。</string>
+    <string name="fault_unknown">不明なエラーです（%1$d）。</string>
+    <string name="settings_diag">同期の診断</string>
+    <string name="settings_diag_ok">サーバー接続は正常</string>
+    <string name="settings_diag_last">最後のエラー · %1$s</string>
+    <string name="settings_diag_log">最近の通信記録</string>
+    <string name="settings_diag_copy">記録をコピー</string>
+    <string name="settings_diag_clear">記録を消す</string>
+    <string name="settings_diag_check">サーバーを再確認</string>
+    <string name="settings_diag_checking">確認中…</string>
+    <string name="settings_diag_empty">記録なし</string>
+    <string name="settings_sync_room_ok">ルーム情報：サーバーにあり</string>
+    <string name="settings_sync_room_missing">ルーム情報：サーバーに無し</string>
+    <string name="stay_just">到着したばかり</string>
+    <string name="stay_min">%1$d分滞在</string>
+    <string name="stay_hour">%1$d時間%2$d分滞在</string>
+    <string name="stay_short_min">%1$d分</string>
+    <string name="stay_short_hour">%1$d時間</string>
 </resources>

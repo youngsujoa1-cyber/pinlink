@@ -59,6 +59,10 @@ data class Member(
     val moving: Boolean,
     val updatedAt: Long,
     val sharing: Boolean = true,
+    /** 지금 이동 속도(km/h) — 2km/h 미만은 0 으로 본다 */
+    val speedKmh: Double = 0.0,
+    /** 이 자리에 머물기 시작한 시각(ms) — 0 이면 모름 */
+    val staySince: Long = 0L,
     val mine: Boolean = false
 ) {
     val valid: Boolean get() = lat.isFinite() && lng.isFinite() && !(lat == 0.0 && lng == 0.0)
@@ -180,6 +184,83 @@ object PinLogic {
 
     fun isMoving(speedMps: Double): Boolean = speedMps.isFinite() && speedMps >= MOVING_SPEED_MPS
 
+    // ------------------------------------------------------------------ 속도
+
+    /**
+     * 이 아래는 '정지'로 본다 — 세워 둔 차에서도 GPS 속도가 0.5~1.5km/h 로 흔들린다.
+     * (대리운전처럼 차를 세워 두는 일이 많은 앱에서는 이 흔들림을 그대로 보여 주면 지저분하다)
+     */
+    const val IDLE_SPEED_KMH = 2.0
+
+    /** GPS 속도(m/s) → 화면·서버에 쓰는 km/h. 없거나 흔들림이면 0 */
+    fun speedKmh(speedMps: Double?): Double {
+        if (speedMps == null || !speedMps.isFinite() || speedMps < 0.0) return 0.0
+        val kmh = speedMps * 3.6
+        if (!kmh.isFinite() || kmh < IDLE_SPEED_KMH) return 0.0
+        return round1(kmh)
+    }
+
+    /** GPS 가 속도를 주지 않을 때 — 두 측정값 사이 거리·시간으로 계산 */
+    fun speedKmhBetween(previous: Fix?, current: Fix): Double {
+        if (previous == null || previous.at <= 0L || current.at <= previous.at) return 0.0
+        val seconds = (current.at - previous.at) / 1000.0
+        val meters = distanceMeters(previous.lat, previous.lng, current.lat, current.lng)
+        // 30m 미만 움직임은 GPS 오차로 본다 (isMovingBetween 과 같은 기준)
+        if (meters < 30.0) return 0.0
+        return speedKmh(meters / seconds)
+    }
+
+    /** 서버에서 받은 값이 이상해도 화면이 깨지지 않게 다듬는다 (음수·NaN·과속 튐 방지) */
+    fun sanitizeSpeedKmh(value: Double?): Double {
+        if (value == null || !value.isFinite() || value < 0.0) return 0.0
+        if (value > MAX_SPEED_KMH) return MAX_SPEED_KMH
+        return if (value < IDLE_SPEED_KMH) 0.0 else round1(value)
+    }
+
+    /** km/h 를 소수 첫째 자리까지 (42.34 → 42.3) */
+    fun round1(value: Double): Double = if (!value.isFinite()) 0.0 else (value * 10.0).roundToInt() / 10.0
+
+    /** 화면에 쓰는 정수 km/h — 0 이면 '정지'로 보여 준다 */
+    fun speedLabelValue(kmh: Double): Int = sanitizeSpeedKmh(kmh).roundToInt()
+
+    /** 지금 움직이는가 (속도 기준) */
+    fun isMovingAt(kmh: Double): Boolean = sanitizeSpeedKmh(kmh) >= IDLE_SPEED_KMH
+
+    /** 사람이 낼 수 없는 속도 — GPS 튐을 걸러 낸다 */
+    const val MAX_SPEED_KMH = 300.0
+
+    // ---------------------------------------------------------------- 체류 시간
+
+    /** 이 반경 안에 머물면 '같은 자리'로 본다 (GPS 오차 감안) */
+    const val STAY_RADIUS_M = 70.0
+
+    /**
+     * 머물기 시작한 시각을 갱신한다.
+     *  - 움직이기 시작했거나(2km/h 이상), 처음 보는 위치거나, 70m 넘게 벗어났으면 '지금'
+     *  - 같은 자리에 서 있으면 기존 시각 유지
+     */
+    fun nextStaySince(previousSince: Long, anchor: Fix?, current: Fix, speedKmh: Double): Long {
+        if (current.at <= 0L) return previousSince
+        if (previousSince <= 0L) return current.at
+        if (isMovingAt(speedKmh)) return current.at
+        if (anchor == null) return previousSince
+        val moved = distanceMeters(anchor.lat, anchor.lng, current.lat, current.lng)
+        return if (moved > STAY_RADIUS_M) current.at else previousSince
+    }
+
+    /** 화면 표시용 체류 시간 — 1분 미만은 '방금 도착' */
+    data class Stay(val justArrived: Boolean, val hours: Long, val minutes: Long)
+
+    fun stay(since: Long, now: Long): Stay {
+        if (since <= 0L || now <= since) return Stay(true, 0, 0)
+        val totalMinutes = (now - since) / 60_000L
+        return Stay(
+            justArrived = totalMinutes < 1L,
+            hours = totalMinutes / 60L,
+            minutes = totalMinutes % 60L
+        )
+    }
+
     /** 속도를 못 받았을 때 두 지점·시간으로 판정 (오차를 감안해 30m 이하는 무시) */
     fun isMovingBetween(previous: Fix?, current: Fix): Boolean {
         if (previous == null || previous.at <= 0L) return false
@@ -223,15 +304,27 @@ object FirestoreCodec {
 
     // ---------------------------------------------------------------- 만들기
 
+    /**
+     * 멤버 문서 — **정확히 8개 필드**를 유지한다.
+     *
+     * 게시된 보안 규칙이 `request.resource.data.size() <= 8` 이라 9개째 필드를 보내면
+     * 403 PERMISSION_DENIED 로 거부된다(v1.0.5 에서 실서버로 확인). 그래서 갱신 시각은
+     * 문서 필드로 보내지 않고 Firestore 가 붙여 주는 `updateTime` 을 읽는다(서버 시계라 더 정확하다).
+     */
     fun memberFields(member: Member): FirestoreFields = mapOf(
         "name" to mapOf("stringValue" to member.name),
         "color" to mapOf("stringValue" to member.color),
         "lat" to mapOf("doubleValue" to member.lat),
         "lng" to mapOf("doubleValue" to member.lng),
         "battery" to mapOf("integerValue" to member.battery.toString()),
-        "moving" to mapOf("booleanValue" to member.moving),
         "sharing" to mapOf("booleanValue" to member.sharing),
-        "updatedAt" to mapOf("timestampValue" to isoUtc(member.updatedAt))
+        "speedKmh" to mapOf("doubleValue" to PinLogic.sanitizeSpeedKmh(member.speedKmh)),
+        "staySince" to mapOf("timestampValue" to isoUtc(member.staySince.takeIf { it > 0L } ?: member.updatedAt))
+    )
+
+    /** 멤버 문서 필드 이름 — 보안 규칙의 8개 제한과 맞는지 검사에 쓴다 */
+    fun memberFieldPaths(): List<String> = listOf(
+        "name", "color", "lat", "lng", "battery", "sharing", "speedKmh", "staySince"
     )
 
     fun roomFields(code: String, owner: String, createdAt: Long, meeting: MeetingPoint?): FirestoreFields {
@@ -297,9 +390,16 @@ object FirestoreCodec {
         (fields[key]?.get("booleanValue") as? Boolean)
             ?: (fields[key]?.get("stringValue") as? String)?.toBooleanStrictOrNull()
 
-    fun memberFrom(fields: FirestoreFields, id: String, mine: Boolean = false): Member? {
+    /**
+     * 문서 → 멤버. 갱신 시각은 문서 필드가 아니라 문서의 `updateTime`(서버 시계)에서 받는다.
+     * 옛 문서에 `updatedAt` 이 남아 있으면 그 값을 함께 본다(되도록 최신 쪽).
+     */
+    fun memberFrom(fields: FirestoreFields, id: String, mine: Boolean = false, updateTime: Long = 0L): Member? {
         val lat = dbl(fields, "lat") ?: return null
         val lng = dbl(fields, "lng") ?: return null
+        val legacyUpdatedAt = timestamp(fields, "updatedAt")
+        val speed = PinLogic.sanitizeSpeedKmh(dbl(fields, "speedKmh"))
+        val staySince = timestamp(fields, "staySince").takeIf { it > 0L } ?: legacyUpdatedAt
         return Member(
             id = id,
             name = str(fields, "name") ?: "Guest",
@@ -307,9 +407,12 @@ object FirestoreCodec {
             lat = lat,
             lng = lng,
             battery = integer(fields, "battery") ?: -1,
-            moving = bool(fields, "moving") ?: false,
-            updatedAt = timestamp(fields, "updatedAt"),
+            // v1.0.5 부터 문서에 moving 이 없다 — 속도에서 계산하고, 예전 문서면 필드를 읽는다
+            moving = bool(fields, "moving") ?: PinLogic.isMovingAt(speed),
+            updatedAt = maxOf(legacyUpdatedAt, updateTime),
             sharing = bool(fields, "sharing") ?: true,
+            speedKmh = speed,
+            staySince = staySince,
             mine = mine
         )
     }

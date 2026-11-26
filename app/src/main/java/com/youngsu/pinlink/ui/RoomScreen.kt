@@ -189,9 +189,9 @@ class RoomScreen(private val host: MainActivity) {
             }
         )
         clearMeeting = Ui.button(act, act.getString(R.string.btn_clear_meeting), primary = false, iconRes = R.drawable.ic_close) {
-            PinSession.setMeeting(null) { ok ->
-                if (!ok) host.toast(act.getString(R.string.err_network))
-                host.toast(act.getString(R.string.toast_meeting_cleared))
+            PinSession.setMeeting(null) { fault ->
+                if (fault == null) host.toast(act.getString(R.string.toast_meeting_cleared))
+                else host.toastFault(act.getString(R.string.err_meeting_save), fault)
             }
         }
         meetingButtons.addView(clearMeeting, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT).apply { weight = 1f })
@@ -306,6 +306,9 @@ class RoomScreen(private val host: MainActivity) {
                     val member = PinSession.members.firstOrNull { it.id == id } ?: continue
                     meta.text = buildString {
                         append(lastUpdateText(member.updatedAt, now))
+                        val speed = PinLogic.speedLabelValue(member.speedKmh)
+                        if (speed > 0) append(" · ").append(act.getString(R.string.speed_kmh, speed))
+                        else if (member.staySince > 0L) append(" · ").append(stayText(act, member.staySince, now))
                         if (member.battery in 0..100) append(" · ").append(act.getString(R.string.member_battery, member.battery))
                     }
                 }
@@ -320,6 +323,12 @@ class RoomScreen(private val host: MainActivity) {
     private fun myMetaLine(now: Long): String {
         val parts = ArrayList<String>()
         parts.add(act.getString(R.string.member_you))
+        val speed = PinLogic.speedLabelValue(PinSession.mySpeedKmh)
+        if (speed > 0) {
+            parts.add(act.getString(R.string.speed_kmh, speed))
+        } else if (PinSession.myStaySince > 0L) {
+            parts.add(stayText(act, PinSession.myStaySince, now))
+        }
         val battery = PinSession.battery
         if (battery in 0..100) parts.add(act.getString(R.string.member_battery, battery))
         parts.add(act.getString(if (PinSession.isSharingNow()) R.string.sharing_live else R.string.sharing_paused))
@@ -344,13 +353,21 @@ class RoomScreen(private val host: MainActivity) {
         for (member in PinSession.members) {
             val meta = buildString {
                 append(lastUpdateText(member.updatedAt, now))
+                val speed = PinLogic.speedLabelValue(member.speedKmh)
+                if (speed > 0) append(" · ").append(act.getString(R.string.speed_kmh, speed))
+                else if (member.staySince > 0L) append(" · ").append(stayText(act, member.staySince, now))
                 if (member.battery in 0..100) append(" · ").append(act.getString(R.string.member_battery, member.battery))
             }
+            val speed = PinLogic.speedLabelValue(member.speedKmh)
             val row = memberRow(
                 name = member.name,
                 color = member.color,
                 meta = meta,
-                trailing = act.getString(if (member.moving) R.string.state_moving else R.string.state_stopped)
+                trailing = when {
+                    speed > 0 -> act.getString(R.string.speed_kmh, speed)
+                    member.staySince > 0L -> stayText(act, member.staySince, now, short = true)
+                    else -> act.getString(R.string.state_stopped)
+                }
             )
             row.tag = member.id
             membersBox.addView(row, LinearLayout.LayoutParams(
@@ -370,7 +387,7 @@ class RoomScreen(private val host: MainActivity) {
 
     private fun memberRow(name: String, color: String, meta: String, trailing: String): LinearLayout {
         val row = Ui.row(act)
-        val avatar = Ui.text(act, name.trim().firstOrNull()?.toString()?.uppercase() ?: "?", 13f, Color.parseColor("#03231C"), bold = true).apply {
+        val avatar = Ui.text(act, name.trim().firstOrNull()?.toString()?.uppercase() ?: "?", 13f, Color.parseColor("#0B0F19"), bold = true).apply {
             gravity = Gravity.CENTER
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL

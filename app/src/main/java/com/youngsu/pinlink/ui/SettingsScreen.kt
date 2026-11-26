@@ -1,7 +1,11 @@
 package com.youngsu.pinlink.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.provider.Settings
@@ -17,6 +21,7 @@ import com.youngsu.pinlink.data.AppLanguage
 import com.youngsu.pinlink.data.AppPrefs
 import com.youngsu.pinlink.data.PinSession
 import com.youngsu.pinlink.data.Sync
+import com.youngsu.pinlink.data.SyncLog
 
 /** 설정 — 프로필, 위치 권한 상태, 앱 언어, 개인정보 처리방침, 광고·버전 안내 */
 class SettingsScreen(private val host: MainActivity) {
@@ -32,6 +37,10 @@ class SettingsScreen(private val host: MainActivity) {
     private val languageValue: TextView
     private val syncNote: TextView
     private val permissionNote: TextView
+    private val diagStatus: TextView
+    private val diagRoom: TextView
+    private val diagLast: TextView
+    private val diagLog: TextView
 
     init {
         val scroll = NestedScrollView(act).apply { isFillViewport = true; clipToPadding = false }
@@ -157,6 +166,89 @@ class SettingsScreen(private val host: MainActivity) {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = act.dp(12f) })
 
+        // ------------------------------------------------------------ 동기화 진단
+        // 실패했을 때 "왜"를 여기서 바로 볼 수 있다 (권한 403·방 없음 404·시간 초과…)
+        column.addView(
+            Ui.sectionTitle(act, act.getString(R.string.settings_diag)),
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = act.dp(20f)
+                leftMargin = act.dp(4f)
+            }
+        )
+        val diag = card()
+        diagStatus = Ui.text(act, "", 12.5f, act.getColor(R.color.accent), bold = true)
+        diag.addView(diagStatus, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
+        diagRoom = Ui.text(act, "", 11.5f, act.getColor(R.color.text_secondary)).apply {
+            setPadding(0, act.dp(6f), 0, 0)
+        }
+        diag.addView(diagRoom, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
+        diagLast = Ui.text(act, "", 11f, act.getColor(R.color.warn)).apply {
+            setPadding(0, act.dp(6f), 0, 0)
+        }
+        diag.addView(diagLast, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
+        diag.addView(
+            Ui.sectionTitle(act, act.getString(R.string.settings_diag_log)),
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = act.dp(12f)
+            }
+        )
+        diagLog = Ui.text(act, "", 9.5f, act.getColor(R.color.text_tertiary)).apply {
+            typeface = Typeface.create("monospace", Typeface.NORMAL)
+            setPadding(0, act.dp(6f), 0, 0)
+            setTextIsSelectable(true)
+        }
+        diag.addView(diagLog, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
+        val check = Ui.button(act, act.getString(R.string.settings_diag_check), primary = false, iconRes = R.drawable.ic_shield) {
+            host.toast(act.getString(R.string.settings_diag_checking))
+            PinSession.verifyRoom(recreate = true) { fault, repaired ->
+                host.toastFault(
+                    act.getString(
+                        when {
+                            fault != null -> R.string.err_network
+                            repaired -> R.string.toast_room_restored
+                            else -> R.string.settings_diag_ok
+                        }
+                    ),
+                    fault
+                )
+                refresh()
+            }
+        }
+        diag.addView(check, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = act.dp(12f) })
+        val diagButtons = Ui.row(act)
+        diagButtons.addView(
+            Ui.button(act, act.getString(R.string.settings_diag_copy), primary = false, iconRes = R.drawable.ic_copy) {
+                copyDiagnostics()
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                weight = 1f
+                rightMargin = act.dp(8f)
+            }
+        )
+        diagButtons.addView(
+            Ui.button(act, act.getString(R.string.settings_diag_clear), primary = false) {
+                SyncLog.clear()
+                refresh()
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT).apply { weight = 1f }
+        )
+        diag.addView(diagButtons, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = act.dp(8f) })
+        column.addView(diag, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = act.dp(8f) })
+
         // ------------------------------------------------------------------ 정보
         column.addView(
             Ui.sectionTitle(act, act.getString(R.string.settings_about)),
@@ -234,6 +326,25 @@ class SettingsScreen(private val host: MainActivity) {
         }
         syncNote.text = act.getString(if (Sync.isDemo) R.string.settings_sync_demo else R.string.settings_sync_live)
         permissionNote.visibility = View.VISIBLE
+
+        // 진단 — 마지막 실패 이유와 최근 통신 기록을 그대로 보여 준다
+        diagStatus.text = act.getString(if (Sync.isDemo) R.string.settings_sync_demo else R.string.settings_diag_ok)
+        diagStatus.setTextColor(act.getColor(if (Sync.isDemo) R.color.warn else R.color.accent))
+        val code = PinSession.roomCode
+        diagRoom.text = when {
+            code.isEmpty() -> ""
+            PinSession.roomOnServer == false -> "$code · ${act.getString(R.string.settings_sync_room_missing)}"
+            PinSession.roomOnServer == true -> "$code · ${act.getString(R.string.settings_sync_room_ok)}"
+            else -> code
+        }
+        val fault = PinSession.lastFault
+        diagLast.text = if (fault == null) {
+            ""
+        } else {
+            act.getString(R.string.settings_diag_last, "${PinSession.lastFaultAt} · ${fault.logText}")
+        }
+        val lines = SyncLog.tail(8)
+        diagLog.text = if (lines.isEmpty()) act.getString(R.string.settings_diag_empty) else lines.joinToString("\n")
     }
 
     // ------------------------------------------------------------------ 부품
@@ -262,6 +373,20 @@ class SettingsScreen(private val host: MainActivity) {
             data = Uri.fromParts("package", act.packageName, null)
         }
         runCatching { act.startActivity(intent) }
+    }
+
+    private fun copyDiagnostics() {
+        val text = buildString {
+            append("PinLink ").append(buildVersionName()).append('\n')
+            append("sync: ").append(if (Sync.isDemo) "demo" else "live").append('\n')
+            append("room: ").append(PinSession.roomCode).append(" onServer=").append(PinSession.roomOnServer).append('\n')
+            PinSession.lastFault?.let { append("last: ").append(PinSession.lastFaultAt).append(" · ").append(it.logText).append('\n') }
+            append("--- log ---\n")
+            append(SyncLog.dump())
+        }
+        val clipboard = act.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        clipboard?.setPrimaryClip(ClipData.newPlainText("PinLink sync", text))
+        host.toast(act.getString(R.string.crash_copied))
     }
 
     private fun iconBadge(iconRes: Int): View = LinearLayout(act).apply {

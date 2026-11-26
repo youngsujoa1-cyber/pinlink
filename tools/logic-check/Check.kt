@@ -54,6 +54,8 @@ fun main() {
     durationChecks()
     distanceChecks()
     motionChecks()
+    speedChecks()
+    stayChecks()
     codecChecks()
     regionChecks()
 
@@ -190,6 +192,56 @@ fun motionChecks() {
     expect("NaN fix invalid", Fix(Double.NaN, 127.0).valid, false)
 }
 
+// ------------------------------------------------------------------ 속도(km/h)
+
+fun speedChecks() {
+    expect("speed 0 m/s", PinLogic.speedKmh(0.0), 0.0)
+    expect("speed 0.3 m/s is stopped (1.08km/h)", PinLogic.speedKmh(0.3), 0.0)
+    expect("speed 0.55 m/s is stopped (1.98km/h)", PinLogic.speedKmh(0.55), 0.0)
+    expectNear("speed 1 m/s", PinLogic.speedKmh(1.0), 3.6, 0.001)
+    expectNear("speed 11.6667 m/s is 42km/h", PinLogic.speedKmh(11.6667), 42.0, 0.05)
+    expect("speed null", PinLogic.speedKmh(null), 0.0)
+    expect("speed NaN", PinLogic.speedKmh(Double.NaN), 0.0)
+    expect("speed negative", PinLogic.speedKmh(-2.0), 0.0)
+    expect("sanitize huge", PinLogic.sanitizeSpeedKmh(9_999.0), PinLogic.MAX_SPEED_KMH)
+    expect("sanitize 1.5km/h -> 0", PinLogic.sanitizeSpeedKmh(1.5), 0.0)
+    expect("sanitize NaN -> 0", PinLogic.sanitizeSpeedKmh(Double.NaN), 0.0)
+    expect("label 42.4 -> 42", PinLogic.speedLabelValue(42.4), 42)
+    expect("isMovingAt 1.9", PinLogic.isMovingAt(1.9), false)
+    expect("isMovingAt 2.0", PinLogic.isMovingAt(2.0), true)
+
+    val t0 = 1_700_000_000_000L
+    val previous = Fix(37.5, 127.0, at = t0)
+    // 약 200m / 10초 = 20 m/s = 72 km/h
+    val fast = Fix(37.5018, 127.0, at = t0 + 10_000)
+    expectNear("speedKmhBetween ~72", PinLogic.speedKmhBetween(previous, fast), 72.0, 4.0)
+    expect("speedKmhBetween no previous", PinLogic.speedKmhBetween(null, fast), 0.0)
+    expect("speedKmhBetween jitter 10m", PinLogic.speedKmhBetween(previous, Fix(37.50009, 127.0, at = t0 + 10_000)), 0.0)
+    expect("speedKmhBetween same time", PinLogic.speedKmhBetween(previous, fast.copy(at = t0)), 0.0)
+}
+
+// ---------------------------------------------------------------- 체류 시간
+
+fun stayChecks() {
+    val t0 = 1_700_000_000_000L
+    expect("stay 30s just arrived", PinLogic.stay(t0, t0 + 30_000).justArrived, true)
+    val twelve = PinLogic.stay(t0, t0 + 12 * 60_000)
+    expect("stay 12min not just", twelve.justArrived, false)
+    expect("stay 12min hours", twelve.hours, 0L)
+    expect("stay 12min minutes", twelve.minutes, 12L)
+    val long = PinLogic.stay(t0, t0 + 85 * 60_000)
+    expect("stay 85min hours", long.hours, 1L)
+    expect("stay 85min minutes", long.minutes, 25L)
+    expect("stay unknown since", PinLogic.stay(0L, t0).justArrived, true)
+    expect("stay future since", PinLogic.stay(t0 + 60_000, t0).justArrived, true)
+
+    val anchor = Fix(37.5, 127.0, at = t0)
+    expect("stay keeps when parked", PinLogic.nextStaySince(t0, anchor, Fix(37.50005, 127.0, at = t0 + 60_000), 0.0), t0)
+    expect("stay resets when moving", PinLogic.nextStaySince(t0, anchor, Fix(37.5010, 127.0, at = t0 + 60_000), 30.0), t0 + 60_000)
+    expect("stay resets when far (70m+)", PinLogic.nextStaySince(t0, anchor, Fix(37.5020, 127.0, at = t0 + 60_000), 0.0), t0 + 60_000)
+    expect("stay first fix", PinLogic.nextStaySince(0L, null, Fix(37.5, 127.0, at = t0), 0.0), t0)
+}
+
 // ------------------------------------------------------------ Firestore 직렬화
 
 fun codecChecks() {
@@ -202,27 +254,35 @@ fun codecChecks() {
         battery = 76,
         moving = true,
         updatedAt = 1_764_000_000_000L,
-        sharing = true
+        sharing = true,
+        speedKmh = 42.0,
+        staySince = 1_764_000_000_000L
     )
 
     val fields = FirestoreCodec.memberFields(member)
     expect("member field count", fields.size, 8)
+    expect("member field names", fields.keys.sorted().joinToString(","), FirestoreCodec.memberFieldPaths().sorted().joinToString(","))
+    expect("member has no updatedAt (규칙 8개 제한)", fields.containsKey("updatedAt"), false)
+    expect("member has no moving (속도로 계산)", fields.containsKey("moving"), false)
+    expect("speedKmh doubleValue", fields["speedKmh"]?.get("doubleValue"), 42.0)
+    expect("staySince is ISO", fields["staySince"]?.get("timestampValue"), FirestoreCodec.isoUtc(1_764_000_000_000L))
     expect("name stringValue", fields["name"]?.get("stringValue"), "영수 \"YS\"")
     expect("lat doubleValue", fields["lat"]?.get("doubleValue"), 37.5665)
     expect("battery integerValue is string", fields["battery"]?.get("integerValue"), "76")
-    expect("moving booleanValue", fields["moving"]?.get("booleanValue"), true)
-    expect("updatedAt is ISO", fields["updatedAt"]?.get("timestampValue"), FirestoreCodec.isoUtc(1_764_000_000_000L))
+    expect("sharing booleanValue", fields["sharing"]?.get("booleanValue"), true)
     expectTrue("ISO ends with Z", FirestoreCodec.isoUtc(1_764_000_000_000L).endsWith("Z"))
 
-    val back = FirestoreCodec.memberFrom(fields, "dev1234", mine = true)
+    val back = FirestoreCodec.memberFrom(fields, "dev1234", mine = true, updateTime = 1_764_000_060_000L)
     expect("roundtrip name", back?.name, member.name)
     expect("roundtrip color", back?.color, member.color)
     expect("roundtrip lat", back?.lat, member.lat)
     expect("roundtrip lng", back?.lng, member.lng)
     expect("roundtrip battery", back?.battery, 76)
-    expect("roundtrip moving", back?.moving, true)
+    expect("roundtrip moving from speed", back?.moving, true)
+    expectNear("roundtrip speed", back?.speedKmh ?: -1.0, 42.0, 0.01)
+    expectNear("roundtrip staySince", (back?.staySince ?: 0L).toDouble(), 1_764_000_000_000.0, 1000.0)
     expect("roundtrip mine", back?.mine, true)
-    expectNear("roundtrip updatedAt (초 단위)", (back?.updatedAt ?: 0L).toDouble(), member.updatedAt.toDouble(), 1000.0)
+    expectNear("roundtrip updatedAt from updateTime", (back?.updatedAt ?: 0L).toDouble(), 1_764_000_060_000.0, 1000.0)
 
     // Firestore 응답은 소수점 이하 초를 붙여 준다
     expect("parse fractional ISO", FirestoreCodec.parseIso("2026-11-25T04:01:10.260314Z"), 1_795_579_270_000L)

@@ -30,10 +30,12 @@ for artifact in \
   "android-all-instrumented/14-robolectric-10818077-i7" \
   "android-all-instrumented/15-robolectric-12650502-i7"; do
   name=$(basename "$artifact")
-  file="$JAR_DIR/$name.jar"
+  # Robolectric 은 파일 이름이 android-all-instrumented-… 인 jar 를 찾는다
+  file="$JAR_DIR/android-all-instrumented-$name.jar"
   if [ ! -f "$file" ]; then
     echo "· 내려받는 중: $name.jar"
-    curl -sL -o "$file" "https://repo1.maven.org/maven2/org/robolectric/$artifact/$name.jar"
+    # 파일 이름은 그룹 이름이 붙은 형태(android-all-instrumented-…) — 경로의 폴더 이름과 다르다
+    curl -sL -o "$file" "https://repo1.maven.org/maven2/org/robolectric/$artifact/android-all-instrumented-$name.jar"
   fi
 done
 

@@ -3,7 +3,7 @@
 친구·가족·동료가 **6자리 방 코드**로 같은 방에 들어와 서로의 위치를 한 지도에서 보는 안드로이드 앱입니다.
 플레이스토어 출시와 AdMob 광고 수익화를 전제로 만들었고, 첫 실행부터 5개 언어(한국어·영어·일본어·중국어·스페인어)를 지원합니다.
 
-- 패키지 `com.youngsu.pinlink` · versionCode `5` · versionName `1.0.4` · minSdk 26 / targetSdk 35
+- 패키지 `com.youngsu.pinlink` · versionCode `6` · versionName `1.0.5` · minSdk 26 / targetSdk 35
 - 지도(하이브리드): **국내는 네이버 지도(JavaScript API v3, WebView)**, **해외는 CARTO 512×512(@2x) 베이스맵**(Canvas 직접 그리기)으로 자동 전환합니다. 대한민국 범위(위도 33.0~38.9, 경도 124.5~132.0)면 네이버, 그 밖이거나 네이버 지도가 뜨지 않으면 CARTO — 지금 떠 있는 지도는 화면 우측 상단 배지(`NAVER` / `CARTO`)에 표시합니다. 어두운/밝은 지도는 두 지도 모두에서 1탭 전환되고 고른 스타일은 앱에 저장됩니다. 네이버 키(`NAVER_MAP_CLIENT_ID`)가 없으면 전 세계를 CARTO 로만 그립니다.
 - 동기화: Firestore REST(`HttpURLConnection`) — 외부 SDK 없음. **v1.0.3 부터 PinLink 전용 무료 Firebase 프로젝트(`pinlink-live`, 서울 리전)에 실제로 연결**되어 있고, 키가 비어 있는 빌드에서는 데모 모드(친구 2명 시뮬레이션)로 내려갑니다.
 
@@ -18,6 +18,8 @@
 | 정책 | 백그라운드 위치를 요청하기 전 **명시적 안내(Prominent Disclosure)** 필수, 동의 전에는 시스템 권한 창을 띄우지 않음 |
 | 지도 | 멤버별 핀(이름·색·첫 글자, 오래된 핀은 흐리게), 내 위치 점, 내 위치로 이동 버튼, 멤버/칩을 누르면 그 멤버로 이동. 국내는 네이버 지도, 해외는 CARTO 지도로 자동 전환 |
 | 약속 장소 | 지도 정중앙 핀으로 집결 장소를 찍고 이름을 붙여 방 전체에 공유 / 지우기 · 지도를 **길게 누르면** 그 자리에 바로 약속 핀 |
+| 속도·체류 (v1.0.5) | GPS 속도를 km/h 로 환산해 내 속도 칩(`42 km/h`)·멤버 카드·방 목록에 표시. 2km/h 미만은 정지로 보고 **머문 시간**(`12분째 머무름`, 1분 미만 `방금 도착`)으로 바뀝니다. 70m 넘게 벗어나거나 움직이면 체류 시간이 새로 시작되고, Firestore `staySince` 로 함께 동기화됩니다 |
+| 디자인 (v1.0.5) | 딥 옵시디언/차콜 글라스 + 샴페인 골드 · 플래티넘 · 시안 포인트. 지도 위 칩은 반투명 다크 글라스 + 1dp 테두리 |
 | 광고 | 화면 최하단 배너(콘텐츠 → 하단 탭 바 → 배너), 방 생성·참여 직후 전면 광고(3분 쿨다운). Google 공식 테스트 ID |
 | 정보 | 개인정보 처리방침(한국어/영어) 앱 내 WebView + `docs/privacy.html` |
 
@@ -29,7 +31,8 @@ export GRADLE_USER_HOME=/workspace/buildenv/gradle-home
 export PATH="$JAVA_HOME/bin:$PATH"
 
 ./gradlew --offline lintDebug assembleDebug     # APK: app/build/outputs/apk/debug/app-debug.apk
-bash tools/logic-check/run.sh                   # 순수 로직 검사(방 코드·만료·거리·Firestore 직렬화)
+bash tools/logic-check/run.sh                   # 순수 로직 검사(방 코드·만료·거리·속도·체류·Firestore 직렬화)
+bash tools/server-check/run.sh                  # 실서버 왕복 검사(방·약속·멤버 8필드·규칙 거부)
 python3 tools/map-js-check/check.py             # 지도 페이지 JS 검사(pip install dukpy 필요)
 ```
 
@@ -99,8 +102,10 @@ service cloud.firestore {
 
 ```
 rooms/{code}                     code, owner, createdAt, active, meetingLat/Lng/Name/By/At
-rooms/{code}/members/{deviceId}  name, color, lat, lng, battery, moving, sharing, updatedAt
+rooms/{code}/members/{deviceId}  name, color, lat, lng, battery, sharing, speedKmh, staySince
 ```
+
+> **멤버 문서는 정확히 8필드**입니다. 게시된 규칙이 `request.resource.data.size() <= 8` 이라 9번째 필드를 보내면 403 입니다(v1.0.5 실서버 확인). 그래서 v1.0.5 에서 `moving`(속도로 계산)과 `updatedAt`(문서의 `updateTime` 사용)을 문서에서 빼고 `speedKmh`·`staySince` 를 넣었습니다 — **규칙은 바꾸지 않아도 됩니다.**
 
 > **주의 (PATCH 는 문서 전체를 교체한다)**: Firestore REST 의 `PATCH` 는 `updateMask` 를 붙이지 않으면 문서를 통째로 갈아엎습니다. v1.0.2 까지 `setMeeting` 이 마스크 없이 보내서 **약속 장소를 찍으면 방 문서의 `code`·`owner`·`createdAt` 이 지워지고, 약속을 지우면 방 문서가 빈 문서가 됐습니다.** v1.0.3 에서는 `FirestoreCodec.meetingMaskQuery()`(`updateMask.fieldPaths=meetingLat&…`)를 항상 붙여 약속 필드만 바꿉니다.
 
@@ -111,7 +116,8 @@ app/src/main/java/com/youngsu/pinlink/
   core/PinLogic.kt          방 코드·공유 시간·거리·움직임·Firestore 직렬화 (안드로이드 없음 → JVM 검사)
   data/AppPrefs.kt          프로필·방·공유 모드 저장
   data/AppLanguage.kt       앱 언어(6개)
-  data/PinCloud.kt          SyncEngine — CloudEngine(Firestore REST) / DemoEngine(시뮬레이션)
+  data/PinCloud.kt          SyncEngine — CloudEngine(Firestore REST) / DemoEngine(시뮬레이션), 실패 사유(SyncFault)
+  data/SyncLog.kt           최근 120줄 통신 기록(설정 → 동기화 진단)
   data/PinSession.kt        앱 상태 한 곳: 위치 요청·8초 업로드·폴링·만료 처리
   location/ShareService.kt  포그라운드 서비스 + 알림(중지 버튼)
   map/MapTileProvider.kt    OSM 타일 다운로드·메모리/디스크 캐시
@@ -120,7 +126,8 @@ app/src/main/java/com/youngsu/pinlink/
   ui/widget/NaverMapView.kt   네이버 지도 WebView + JS 브리지(중심·핀 탭·길게 누르기·실패 알림)
   ui/widget/HybridMapView.kt  두 지도를 한 API 로 — 국내/해외에 따라 자동 전환
   assets/naver_map.html       네이버 지도 페이지(핀·내 위치·깃발·고정 핀·다크 모드는 CSS 색반전)
-  ui/MainActivity.kt        탭(지도·방·설정) + 배너 + 권한 흐름 + 전면 광고
+  ui/StayText.kt            체류 시간 문구(방금 도착 / 12분째 머무름)
+  ui/MainActivity.kt        탭(지도·방·설정) + 배너 + 권한 흐름 + 전면 광고 + 실패 사유 토스트
   ui/MapScreen · RoomScreen · SettingsScreen · Dialogs · Onboarding · PrivacyActivity
 ```
 
@@ -135,7 +142,8 @@ app/src/main/java/com/youngsu/pinlink/
 
 ## 검증한 것 / 못 한 것
 
-- `./gradlew --offline lintDebug assembleDebug` 통과 (lint error 0)
+- `./gradlew --offline lintDebug assembleDebug` 통과 (lint error 0, v1.0.5)
+- `bash tools/server-check/run.sh` — v1.0.5 실서버 **12개 검사 전부 통과**: 방 생성·조회, 약속 찍기/지우기(updateMask), **방이 없을 때 약속 PATCH 는 403(버그 재현)**, 멤버 8필드(speedKmh·staySince) 200, **9필드 403**, 방 없는 멤버 쓰기 200, 멤버 삭제 200, 방 문서 삭제 403
 - JVM 로직 검사 **전부 통과** (`tools/logic-check/run.sh`, v1.0.3 에서 약속 마스크 검사 4개 추가): 방 코드 생성·정규화(전각 문자 포함), 모드별 종료 시각·남은 시간·만료, 하버사인 거리, 이동 판정, Firestore 필드·JSON 직렬화(이스케이프·숫자 표기), 문서 되읽기
 - APK 확인(v1.0.3): `aapt2 dump badging` 으로 패키지 `com.youngsu.pinlink` / versionCode 4 / 1.0.3 / targetSdk 35 / `INTERNET` 권한 / 권한 9종, `foregroundServiceType=0x8(location)` 서비스, `assets/privacy.html`, 5개 언어 문자열, adaptive icon 포함
 - Firestore REST 요청 모양 검증: 앱이 보내는 그대로의 본문을 실제 Firestore 엔드포인트로 보내 **400(깨진 JSON)과 달리 403(규칙 거부)** 응답을 확인 — 즉 본문은 파싱되고 보안 규칙에서만 막힌다
@@ -146,6 +154,41 @@ app/src/main/java/com/youngsu/pinlink/
 - 지도 페이지 JS를 Duktape 로 스텁 렌더링해 26개 동작 검사 (`python3 tools/map-js-check/check.py`, `pip install dukpy`): 멤버 마커 생성·재사용·삭제, 이름표/첫 글자/색/투명도/선택 링, 내 위치 점, 약속 깃발, 이동(`moveTo`), 다크 클래스 on/off, 고정 핀 on/off, 따라가기 on/off, 중심 콜백
 - `tools/ui-smoke/run.sh` 에 지도 제공자 배지 검사 추가 — 네이버 지도가 준비되지 않는 환경에서 9초 뒤 CARTO 로 넘어가고 앱은 살아 있는지(13개 테스트 전부 통과)
 - **못 한 것**: 이 환경에는 기기·에뮬레이터가 없어 실제 화면 렌더링, GPS 측정, 백그라운드 서비스 유지, 광고 노출, **두 기기 사이의 실제 위치 동기화**, **네이버 지도 위에서의 핀·핀치 체감**은 설치 후 확인이 필요합니다(서버·인증·타일 요청은 위처럼 검증).
+
+## v1.0.5 — "서버에 연결하지 못했어요" 원인과 수정 + 속도·체류·프리미엄 다크 (2026-11-26)
+
+**실기기 증상**: 5G 로 연결된 폰에서 방 코드 `SV55WC` 를 띄운 채 지도 화면에 `서버에 연결하지 못했어요. 인터넷 연결을 확인해 주세요.` 토스트.
+
+**원인 (실서버로 재현·확정)**
+
+1. **그 방 문서가 서버에 없었습니다** — `GET rooms/SV55WC` → 404, `rooms` 컬렉션 0건. 화면의 코드·`공유 중` 은 기기에 저장된(prefs) 값이었습니다.
+2. 지도 화면에서 이 문구가 뜨는 곳은 **약속 장소 저장**(`PATCH rooms/{code}?updateMask=…`) 한 곳뿐입니다. 문서가 없는 상태의 `PATCH` 는 Firestore 에서 **문서 만들기(create)** 로 처리되는데, 게시된 규칙의 create 조건 `request.resource.data.code == code` 를 약속 본문(`meeting*` 만)이 만족하지 못해 **403 PERMISSION_DENIED** (curl 로 그대로 재현).
+3. 앱이 모든 비2xx·예외를 `false` 하나로 뭉개 `err_network` 만 띄웠습니다 — 권한 거부가 네트워크 문제로 보였던 이유.
+4. 방이 없어도 **멤버 문서 쓰기는 200** 이라(하위 컬렉션은 부모 문서를 요구하지 않음) 지도·`공유 중` 은 정상으로 보였습니다.
+5. `fetchRoom` 이 **404(없음)와 통신 실패를 구분하지 못해** 앱이 방이 사라진 걸 알아채지도, 고치지도 못했습니다.
+
+**수정**
+
+- `ensureRoom(seed)` — 방·약속을 쓰기 전에 `code`·`owner`·`createdAt` 이 들어간 온전한 문서를 보장. 앱 시작·폴링에서 방이 사라졌으면 **스스로 되살리고** 한 번 알립니다(`서버에 없던 방 정보를 다시 만들었어요`). 사용자의 `SV55WC` 도 다음 실행 때 서버에 다시 생깁니다.
+- 실패를 이유별로 구분: `OFFLINE / DENIED(403) / MISSING(404) / BAD_REQUEST / SERVER / UNKNOWN` + Firestore 원문 메시지. 토스트에 사유 한 줄, `설정 → 동기화 진단` 에 마지막 오류·최근 통신 기록·`서버 다시 확인`·`기록 복사`.
+- `SyncLog`: 최근 120줄을 기기에 남기고 복사할 수 있게(기기에서만 나는 문제를 캡처 없이 확인).
+- **속도(km/h)**: GPS `location.speed` → km/h, 2km/h 미만은 정지(0). 속도를 못 받으면 두 측점 거리·시간으로 계산. 지도 상단 칩·멤버 카드·방 목록에 표시.
+- **체류 시간**: 70m 안에서 서 있으면 `staySince` 유지, 움직이거나 벗어나면 새로 시작 → `12분째 머무름` / `1시간 25분째` / 1분 미만 `방금 도착`. Firestore `staySince` 로 동기화(재시작해도 이어짐).
+- **프리미엄 다크**: 딥 옵시디언(`#080B12`~`#141B2D`) + 샴페인 골드(`#E5C158`/`#D4AF37`) + 플래티넘/시안. 지도 위 칩은 반투명 글라스 + 1dp 골드 헤어라인. 네이버 지도일 때 앱이 그리던 저작권 문구를 감춰 SDK 로고와 겹치지 않게 정리.
+- **초대 문구에 Play 스토어 링크** 추가(5개 언어): `https://play.google.com/store/apps/details?id=com.youngsu.pinlink`
+- 테스트 도구 `tools/server-check/run.sh` 추가, `tools/ui-smoke/run.sh` 의 Robolectric jar 내려받기 경로 오류 수정(파일 이름 `android-all-instrumented-…`).
+- 버전 `versionCode 6` / `versionName "1.0.5"`
+
+**검증**
+
+- `tools/logic-check/run.sh` 199 PASS(속도 16·체류 12·문서 8필드 검사 추가) · `tools/ui-smoke/run.sh` 13개 통과 · `lintDebug` · `assembleDebug` 통과
+- `tools/server-check/run.sh` 12/12 통과(위 목록)
+- APK `downloads/pinlink.apk` — `aapt2 dump badging`: versionCode 6 / 1.0.5, debug 서명(다른 안드로이드 폰에 그대로 설치 가능)
+
+**남은 주의**
+
+- 실기기에서 GPS 속도·체류 값의 체감(터널·지하주차장 등)은 설치 후 확인이 필요합니다. 속도를 못 받는 기기에서는 위치 변화로 계산하므로 8초 업로드 주기만큼 늦게 반영됩니다.
+- `tools/server-check/run.sh` 는 `rooms/CHECK5` 검사 방을 남깁니다(규칙상 앱에서 방 문서를 지울 수 없음). 콘솔에서 지우면 됩니다.
 
 ## v1.0.4 — 국내 네이버 지도 + 해외 CARTO (2026-11-26)
 

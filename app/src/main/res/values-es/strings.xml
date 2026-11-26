@@ -44,7 +44,7 @@
     <string name="btn_copy">Copiar</string>
     <string name="btn_share">Compartir</string>
     <string name="code_copied">Código copiado</string>
-    <string name="invite_message">Únete a mí en PinLink y mira mi ubicación en vivo. Código de sala: %1$s</string>
+    <string name="invite_message">Únete a mí en PinLink y mira mi ubicación en vivo. Código de sala: %1$s\nDescarga la app: https://play.google.com/store/apps/details?id=com.youngsu.pinlink</string>
     <string name="share_chooser_title">Compartir código de sala</string>
     <string name="members_title">En esta sala</string>
     <string name="members_count">%1$d miembro(s) compartiendo</string>
@@ -150,4 +150,31 @@
     <string name="last_crash_copy">Copiar</string>
     <string name="crash_copied">Copiado</string>
     <string name="close">Cerrar</string>
+
+    <string name="speed_kmh">%1$d km/h</string>
+    <string name="speed_idle">Detenido</string>
+    <string name="err_meeting_save">No se pudo guardar el punto de encuentro.</string>
+    <string name="toast_room_restored">La sala no existía en el servidor y se ha vuelto a crear.</string>
+    <string name="fault_offline">Revisa tu conexión a internet.</string>
+    <string name="fault_denied">El servidor rechazó la solicitud (403).</string>
+    <string name="fault_missing">El servidor no tiene ese registro (404).</string>
+    <string name="fault_bad">La solicitud no es válida (%1$d).</string>
+    <string name="fault_server">Hubo un problema en el servidor (%1$d).</string>
+    <string name="fault_unknown">Error desconocido (%1$d).</string>
+    <string name="settings_diag">Diagnóstico de sincronización</string>
+    <string name="settings_diag_ok">Conexión con el servidor correcta</string>
+    <string name="settings_diag_last">Último error · %1$s</string>
+    <string name="settings_diag_log">Solicitudes recientes</string>
+    <string name="settings_diag_copy">Copiar registro</string>
+    <string name="settings_diag_clear">Borrar registro</string>
+    <string name="settings_diag_check">Comprobar servidor</string>
+    <string name="settings_diag_checking">Comprobando…</string>
+    <string name="settings_diag_empty">Sin registros</string>
+    <string name="settings_sync_room_ok">Sala: en el servidor</string>
+    <string name="settings_sync_room_missing">Sala: no está en el servidor</string>
+    <string name="stay_just">Acaba de llegar</string>
+    <string name="stay_min">%1$d min aquí</string>
+    <string name="stay_hour">%1$d h %2$d min aquí</string>
+    <string name="stay_short_min">%1$d min</string>
+    <string name="stay_short_hour">%1$d h</string>
 </resources>
