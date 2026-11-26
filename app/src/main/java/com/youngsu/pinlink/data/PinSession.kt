@@ -650,6 +650,18 @@ object PinSession {
         }
     }
 
+    /**
+     * 화면 검사·미리보기 도구가 대화를 채워 넣을 때만 쓰는 통로.
+     * 앱 코드는 언제나 서버·DemoEngine 에서 받은 값을 쓴다.
+     */
+    @androidx.annotation.VisibleForTesting
+    fun previewMessagesForTest(items: List<ChatMessage>) {
+        messages = PinLogic.mergeChat(emptyList(), items.map { it.copy(mine = it.senderId == prefs.deviceId) })
+        topChatId = messages.lastOrNull()?.id.orEmpty()
+        chatUnread = 0
+        notifyChanged()
+    }
+
     /** 방 문서에서 약속 장소를 받는다 (다른 멤버가 찍었을 수 있다) */
     fun refreshRoom() {
         if (roomCode.isEmpty()) return

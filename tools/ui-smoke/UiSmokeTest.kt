@@ -225,6 +225,66 @@ class UiSmokeTest {
     }
 
     @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h891dp-xxhdpi")
+    fun chatBubblesShowBothSidesAndPreview() {
+        val app = RuntimeEnvironment.getApplication()
+        val prefs = AppPrefs.get(app)
+        prefs.languageOnboarded = true
+        prefs.nickname = "영수"
+        prefs.roomCode = "CHATV6"
+        prefs.roomOwner = true
+        prefs.shareMode = ShareMode.PAUSED
+        prefs.startedAt = 0L
+        prefs.expiresAt = 0L
+
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        ShadowLooper.idleMainLooper()
+        layout(activity)
+        activity.findViewById<View>(R.id.nav_chat)?.performClick()
+        ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS)
+        layout(activity)
+
+        val me = prefs.deviceId
+        val now = System.currentTimeMillis()
+        PinSession.previewMessagesForTest(
+            listOf(
+                com.youngsu.pinlink.core.ChatMessage(
+                    "preview-1", "friend-mina", "Mina", "#FF7A59",
+                    "정자역 2번 출구에서 만날까요?", now - 240_000L
+                ),
+                com.youngsu.pinlink.core.ChatMessage(
+                    "preview-2", "friend-alex", "Alex", "#6FE3FF",
+                    "저는 지금 수지 쪽이에요. 10분쯤 걸려요.", now - 180_000L
+                ),
+                com.youngsu.pinlink.core.ChatMessage(
+                    "preview-3", me, "영수", "#E5C158",
+                    "네, 천천히 오세요 👍", now - 60_000L
+                )
+            )
+        )
+        ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS)
+        layout(activity)
+
+        val shown = texts(activity.window.decorView)
+        assertTrue("남의 메시지가 보여야 한다: $shown", shown.any { it == "정자역 2번 출구에서 만날까요?" })
+        assertTrue("내 메시지가 보여야 한다: $shown", shown.any { it == "네, 천천히 오세요 👍" })
+        assertTrue("보낸 사람 이름이 보여야 한다: $shown", shown.any { it == "Mina" } && shown.any { it == "Alex" })
+        assertTrue("시각이 보여야 한다: $shown", shown.any { it.matches(Regex("\\d{2}:\\d{2}")) })
+
+        // 미리보기 그림 (기기 화면이 아니라 Robolectric 렌더)
+        layout(activity)
+        val root = activity.window.decorView
+        val width = if (root.width > 0) root.width else 1080
+        val height = if (root.height > 0) root.height else 2340
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        root.draw(Canvas(bitmap))
+        val out = File("/workspace/work/preview-chat.png")
+        out.parentFile?.mkdirs()
+        out.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        assertTrue("미리보기 파일이 만들어져야 한다", out.length() > 10_000)
+    }
+
+    @Test
     fun crashLogIsRecordedAndShown() {
         val app = RuntimeEnvironment.getApplication()
         AppPrefs.get(app).languageOnboarded = true

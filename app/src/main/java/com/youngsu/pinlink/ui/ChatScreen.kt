@@ -210,6 +210,12 @@ class ChatScreen(private val host: MainActivity) {
         membersText.text = act.getString(R.string.chat_members, PinSession.members.size + 1)
         updateSendEnabled()
 
+        // 대화가 적을 때도 입력줄 바로 위에 붙게 (스크롤 영역 높이만큼 최소 높이를 잡고 아래로 정렬)
+        if (scroll.height > 0 && listBox.minimumHeight != scroll.height) {
+            listBox.minimumHeight = scroll.height
+            listBox.gravity = Gravity.BOTTOM
+        }
+
         val messages = PinSession.messages
         val now = System.currentTimeMillis()
         val newSignature = buildString {

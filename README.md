@@ -209,11 +209,12 @@ app/src/main/java/com/youngsu/pinlink/
 **검증**
 
 - JVM **246 PASS** · 실서버 **20/20** · Robolectric **14개** · `lintDebug`·`assembleDebug` 통과
-- APK `downloads/pinlink.apk` — `aapt2 dump badging` versionCode **7** / **1.0.6**, 12,753,723 B (sha256 `eba6c05d…`), debug 서명(`CN=Android Debug`), 5개 언어 `chat_title`(ko `방 채팅`, ja `ルームチャット`, zh `房间聊天`, es `Chat de la sala`), `ic_chat`·`ic_send` 포함
+- APK `downloads/pinlink.apk` — `aapt2 dump badging` versionCode **7** / **1.0.6**, 12,753,723 B (sha256 `68a81b5c…`), debug 서명(`CN=Android Debug`), 5개 언어 `chat_title`(ko `방 채팅`, ja `ルームチャット`, zh `房间聊天`, es `Chat de la sala`), `ic_chat`·`ic_send` 포함
 
 **남은 주의**
 
 - **두 기기 사이 실제 채팅**은 설치 후 확인이 필요합니다(서버 왕복은 검증).
+- 디자인 미리보기: `downloads/pinlink-chat-preview.png` (Robolectric 렌더 — 기기 캡처 아님, 상태바·광고는 안 보임)
 - 검사용 대화가 `rooms/CHAT01/messages`·`rooms/CHKCHT/messages`·`rooms/CHKMSG/messages`·`rooms/UITEST/messages` 에 남습니다 — 규칙상 메시지는 지울 수 없어 **Firebase 콘솔에서만** 정리됩니다.
 - 메시지는 방마다 계속 쌓입니다(최근 100건만 앱에 보이지만 서버에는 남음). 지울 수 없게 둔 대신, 문서가 많아지면 콘솔에서 오래된 방째로 정리하면 됩니다.
 - 읽지 않음 배지는 앱이 켜져 있는 동안만 생깁니다(푸시 알림 없음). 알림이 필요하면 FCM 추가가 다음 단계입니다.
