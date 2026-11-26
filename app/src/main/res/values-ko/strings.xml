@@ -85,6 +85,8 @@
 
     <string name="map_style_toggle">지도 스타일 바꾸기</string>
     <string name="map_recenter">내 위치</string>
+    <string name="map_source_badge">지도 제공자</string>
+    <string name="map_attribution_naver">© NAVER Corp. · 네이버 지도</string>
     <string name="btn_meeting_pin">약속 장소</string>
     <string name="pick_mode_title">모일 곳으로 지도를 옮기세요</string>
     <string name="pick_mode_action">여기로 지정</string>

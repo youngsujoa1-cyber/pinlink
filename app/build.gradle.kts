@@ -21,6 +21,9 @@ val firebaseProjectId: String = prop("FIREBASE_PROJECT_ID", "pinlink-live")
 val firebaseApiKey: String = prop("FIREBASE_API_KEY")
 // Carto 타일 키(선택) — 없으면 OpenStreetMap 표준 타일로 그린다
 val cartoKey: String = prop("CARTO_KEY")
+// 네이버 지도(NCP Dynamic Map) 클라이언트 ID — 비어 있으면 전 세계를 CARTO 지도로만 그린다.
+// 국내 지도만 네이버 지도(WebView)로 그리고, 해외는 CARTO 로 자동 전환한다.
+val naverMapClientId: String = prop("NAVER_MAP_CLIENT_ID")
 
 android {
     namespace = "com.youngsu.pinlink"
@@ -30,12 +33,13 @@ android {
         applicationId = "com.youngsu.pinlink"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 5
+        versionName = "1.0.4"
 
         buildConfigField("String", "FIREBASE_PROJECT_ID", "\"$firebaseProjectId\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"$firebaseApiKey\"")
         buildConfigField("String", "CARTO_KEY", "\"$cartoKey\"")
+        buildConfigField("String", "NAVER_MAP_CLIENT_ID", "\"$naverMapClientId\"")
 
         vectorDrawables {
             useSupportLibrary = true

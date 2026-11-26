@@ -93,6 +93,8 @@
     <!-- 지도 -->
     <string name="map_style_toggle">Map style (light / dark)</string>
     <string name="map_recenter">My location</string>
+    <string name="map_source_badge">Map provider</string>
+    <string name="map_attribution_naver">© NAVER Corp. · NAVER Map</string>
     <string name="btn_meeting_pin">Meeting point</string>
     <string name="pick_mode_title">Move the map to the spot everyone meets</string>
     <string name="pick_mode_action">Set here</string>

@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>PinLink 지도</title>
+<!--
+  PinLink 국내 지도 — 네이버 지도 JavaScript API v3.
+
+  · 이 파일은 앱 assets 에 들어 있고, WebView 가
+    https://youngsujoa1-cyber.github.io/pinlink/ 를 baseURL 로 열어 준다.
+    (네이버 클라우드 플랫폼에 등록된 Web 서비스 URL 이 그 주소라서 인증이 통과한다)
+  · __NCP_KEY_ID__ 는 앱이 빌드할 때 local.properties 의 NAVER_MAP_CLIENT_ID 로 바꿔 넣는다.
+    저장소(공개)에는 키가 들어가지 않는다.
+  · 지도 조작은 모두 여기서 하고, 결과만 PinLinkNative 브리지로 안드로이드에 알린다.
+-->
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: #0E1520; overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    font-family: -apple-system, "Noto Sans KR", "Malgun Gothic", sans-serif;
+  }
+  #map { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: #0E1520; }
+
+  /* 어두운 지도 — 밝은 네이버 지도를 색반전해 어둡게 만든다.
+     핀·내 위치·깃발은 한 번 더 반전해 원래 색을 지킨다(반전 두 번 = 원래 색). */
+  body.dark #map { filter: invert(1) hue-rotate(180deg); }
+  body.dark .pinwrap, body.dark .mewrap, body.dark .flagwrap { filter: invert(1) hue-rotate(180deg); }
+
+  /* ── 멤버 핀: 아바타 색 원 + 이름 첫 글자, 점 아래 이름표 ── */
+  .pinwrap { position: relative; width: 1px; height: 1px; }
+  .pinwrap .bubble {
+    position: absolute; left: 0; bottom: 17px; margin-left: -17px;
+    width: 34px; height: 34px; box-sizing: border-box; border-radius: 50%;
+    background: var(--c, #2BD9A6); border: 2.2px solid #FFFFFF;
+    color: #FFFFFF; font-size: 15px; font-weight: 700; line-height: 29px; text-align: center;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
+  }
+  .pinwrap .tail {
+    position: absolute; left: 0; bottom: 0; margin-left: -7px;
+    width: 0; height: 0;
+    border-left: 7px solid transparent;
+    border-right: 7px solid transparent;
+    border-top: 17px solid var(--c, #2BD9A6);
+  }
+  .pinwrap.sel .bubble {
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, .38), 0 2px 6px rgba(0, 0, 0, .45);
+  }
+
+  /* 점 아래 이름표 (멤버·약속 장소 공용) */
+  .label {
+    position: absolute; left: 0; top: 5px; transform: translateX(-50%);
+    max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    background: rgba(11, 20, 32, .90); color: #EAF0FA;
+    font-size: 11px; line-height: 14px; padding: 3px 7px; border-radius: 999px;
+    border: 1px solid rgba(34, 49, 74, .55);
+  }
+
+  /* ── 내 위치: 파란 점 + 옅은 물결 ── */
+  .mewrap { position: relative; width: 1px; height: 1px; }
+  .mewrap .halo { position: absolute; left: -18px; top: -18px; width: 36px; height: 36px; border-radius: 50%; background: rgba(76, 141, 255, .22); }
+  .mewrap .ring { position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; border-radius: 50%; background: #FFFFFF; box-shadow: 0 1px 3px rgba(0, 0, 0, .30); }
+  .mewrap .dot { position: absolute; left: -6.5px; top: -6.5px; width: 13px; height: 13px; border-radius: 50%; background: #4C8DFF; }
+
+  /* ── 약속 장소: 민트 깃발 ── */
+  .flagwrap { position: relative; width: 1px; height: 1px; }
+  .flagwrap .pole { position: absolute; left: -1.2px; top: -44px; width: 2.4px; height: 44px; background: #0B1420; border-radius: 2px; }
+  .flagwrap .flag { position: absolute; left: 1px; top: -44px; width: 0; height: 0; border-top: 6.5px solid transparent; border-bottom: 6.5px solid transparent; border-left: 19px solid #2BD9A6; }
+  .flagwrap .base { position: absolute; left: -4.2px; top: -5.2px; width: 8.4px; height: 8.4px; border-radius: 50%; background: #2BD9A6; border: 1.6px solid #FFFFFF; box-sizing: border-box; }
+
+  /* ── 약속 장소 고르기: 화면 정중앙 고정 핀 ── */
+  #pick { position: absolute; left: 50%; top: 50%; width: 0; height: 0; display: none; z-index: 5; }
+  #pick.on { display: block; }
+  #pick .stem { position: absolute; left: -1.2px; top: -28px; width: 2.4px; height: 28px; background: #2BD9A6; }
+  #pick .head { position: absolute; left: -13px; top: -53px; width: 26px; height: 26px; box-sizing: border-box; border-radius: 50%; background: #2BD9A6; border: 2.5px solid #FFFFFF; box-shadow: 0 2px 8px rgba(0, 0, 0, .40); }
+  #pick .head::after { content: ''; position: absolute; left: 7px; top: 7px; width: 7px; height: 7px; border-radius: 50%; background: #03231C; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="pick"><div class="stem"></div><div class="head"></div></div>
+<script>
+(function () {
+  'use strict';
+
+  var bridge = window.PinLinkNative || null;
+  function call(name) {
+    if (!bridge || typeof bridge[name] !== 'function') return;
+    var args = Array.prototype.slice.call(arguments, 1);
+    try { bridge[name].apply(bridge, args); } catch (e) { /* 브리지 오류는 지도 조작을 막지 않는다 */ }
+  }
+
+  /* 앱이 빌드할 때 local.properties 값으로 바꿔 넣는다 */
+  var KEY = '__NCP_KEY_ID__';
+
+  var initial = { lat: 37.5665, lng: 126.9780, zoom: 15 };
+
+  var map = null;
+  var ready = false;
+  var follow = true;
+  var pick = false;
+  var dark = false;
+
+  var pending = [];
+  var memberMarkers = {};
+  var myMarker = null;
+  var meetingMarker = null;
+  var lastMy = null;
+  var lastTapId = '';
+  var lastTapAt = 0;
+
+  // ------------------------------------------------------------------ 도우미
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+  }
+
+  function trimLabel(value) {
+    var text = String(value == null ? '' : value);
+    return text.length > 14 ? text.slice(0, 13) + '…' : text;
+  }
+
+  function fail(reason) { call('onFailure', String(reason || 'error')); }
+
+  function tapMember(id) {
+    if (!id) return;
+    var now = Date.now();
+    if (id === lastTapId && now - lastTapAt < 500) return;   // 마커 클릭 + DOM 클릭 중복 방지
+    lastTapId = id;
+    lastTapAt = now;
+    call('onMemberTap', id);
+  }
+
+  function run(fn) {
+    if (ready) { try { fn(); } catch (e) { fail('run:' + e); } }
+    else pending.push(fn);
+  }
+
+  function flush() {
+    var queue = pending;
+    pending = [];
+    for (var i = 0; i < queue.length; i++) {
+      try { queue[i](); } catch (e) { /* 한 항목이 실패해도 나머지는 적용한다 */ }
+    }
+  }
+
+  function centerOn(lat, lng, zoom) {
+    if (!map) return;
+    var position = new naver.maps.LatLng(lat, lng);
+    if (zoom == null) map.panTo(position, { duration: 420, easing: 'easeOutCubic' });
+    else map.morph(position, zoom, { duration: 420, easing: 'easeOutCubic' });
+  }
+
+  // ------------------------------------------------------------------ 그리기
+
+  function pinIcon(member) {
+    var color = member.color || '#2BD9A6';
+    var initial = (String(member.name || '?').trim().charAt(0) || '?').toUpperCase();
+    var opacity = (typeof member.alpha === 'number') ? member.alpha : 1;
+    var cls = 'pinwrap' + (member.selected ? ' sel' : '');
+    var html = '<div class="' + cls + '" data-pin-id="' + escapeHtml(member.id) + '"' +
+      ' style="--c:' + escapeHtml(color) + ';opacity:' + opacity + '">' +
+      '<div class="bubble">' + escapeHtml(initial) + '</div>' +
+      '<div class="tail"></div>' +
+      '<div class="label">' + escapeHtml(trimLabel(member.name)) + '</div>' +
+      '</div>';
+    return { content: html, size: new naver.maps.Size(1, 1), anchor: new naver.maps.Point(0, 0) };
+  }
+
+  function applyMembers(list) {
+    if (!map) return;
+    var seen = {};
+    for (var i = 0; i < list.length; i++) {
+      var member = list[i];
+      if (!member || !member.id) continue;
+      seen[member.id] = true;
+      var icon = pinIcon(member);
+      var marker = memberMarkers[member.id];
+      if (!marker) {
+        marker = new naver.maps.Marker({
+          position: new naver.maps.LatLng(member.lat, member.lng),
+          map: map,
+          icon: icon,
+          zIndex: member.selected ? 200 : 100
+        });
+        (function (id) {
+          naver.maps.Event.addListener(marker, 'click', function () { tapMember(id); });
+        })(member.id);
+        memberMarkers[member.id] = marker;
+      } else {
+        marker.setPosition(new naver.maps.LatLng(member.lat, member.lng));
+        marker.setIcon(icon);
+        marker.setZIndex(member.selected ? 200 : 100);
+      }
+    }
+    for (var id in memberMarkers) {
+      if (Object.prototype.hasOwnProperty.call(memberMarkers, id) && !seen[id]) {
+        memberMarkers[id].setMap(null);
+        delete memberMarkers[id];
+      }
+    }
+  }
+
+  function applyMy(lat, lng) {
+    if (!map) return;
+    lastMy = { lat: lat, lng: lng };
+    var position = new naver.maps.LatLng(lat, lng);
+    if (!myMarker) {
+      myMarker = new naver.maps.Marker({
+        position: position,
+        map: map,
+        zIndex: 300,
+        icon: {
+          content: '<div class="mewrap"><div class="halo"></div><div class="ring"></div><div class="dot"></div></div>',
+          size: new naver.maps.Size(1, 1),
+          anchor: new naver.maps.Point(0, 0)
+        }
+      });
+    } else {
+      myMarker.setPosition(position);
+    }
+    if (follow) centerOn(lat, lng, null);
+  }
+
+  function applyMeeting(lat, lng, name) {
+    if (!map) return;
+    var position = new naver.maps.LatLng(lat, lng);
+    var html = '<div class="flagwrap">' +
+      '<div class="pole"></div><div class="flag"></div><div class="base"></div>' +
+      (name ? '<div class="label">' + escapeHtml(trimLabel(name)) + '</div>' : '') +
+      '</div>';
+    var icon = { content: html, size: new naver.maps.Size(1, 1), anchor: new naver.maps.Point(0, 0) };
+    if (!meetingMarker) {
+      meetingMarker = new naver.maps.Marker({ position: position, map: map, zIndex: 250, icon: icon });
+    } else {
+      meetingMarker.setPosition(position);
+      meetingMarker.setIcon(icon);
+    }
+  }
+
+  // ------------------------------------------------------------ 길게 누르기
+
+  function bindLongPress() {
+    var el = document.getElementById('map');
+    var timer = null;
+    var startX = 0;
+    var startY = 0;
+
+    function cancel() {
+      if (timer) { clearTimeout(timer); timer = null; }
+    }
+
+    function fire(x, y) {
+      if (!map || pick) return;
+      try {
+        var rect = el.getBoundingClientRect();
+        var projection = map.getProjection();
+        var coord = projection.fromOffsetToCoord(new naver.maps.Point(x - rect.left, y - rect.top));
+        call('onLongPress', coord.lat(), coord.lng());
+        if (navigator.vibrate) navigator.vibrate(12);
+      } catch (e) { /* 좌표를 못 구하면 그냥 넘어간다 */ }
+    }
+
+    function start(x, y) {
+      cancel();
+      startX = x;
+      startY = y;
+      timer = setTimeout(function () { timer = null; fire(x, y); }, 550);
+    }
+
+    function move(x, y) {
+      if (timer && (Math.abs(x - startX) > 12 || Math.abs(y - startY) > 12)) cancel();
+    }
+
+    el.addEventListener('touchstart', function (e) {
+      if (e.touches.length === 1) start(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
+    el.addEventListener('touchmove', function (e) {
+      if (e.touches.length === 1) move(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
+    el.addEventListener('touchend', cancel, { passive: true });
+    el.addEventListener('touchcancel', cancel, { passive: true });
+    el.addEventListener('mousedown', function (e) { start(e.clientX, e.clientY); });
+    el.addEventListener('mousemove', function (e) { move(e.clientX, e.clientY); });
+    el.addEventListener('mouseup', cancel);
+    el.addEventListener('mouseleave', cancel);
+
+    naver.maps.Event.addListener(map, 'dragstart', cancel);
+    naver.maps.Event.addListener(map, 'zoom_changed', cancel);
+  }
+
+  // ------------------------------------------------------------------ 시작
+
+  function init() {
+    if (!window.naver || !naver.maps || !naver.maps.Map) { fail('sdk-missing'); return; }
+
+    map = new naver.maps.Map('map', {
+      center: new naver.maps.LatLng(initial.lat, initial.lng),
+      zoom: initial.zoom,
+      minZoom: 3,
+      maxZoom: 19,
+      mapTypeId: naver.maps.MapTypeId.NORMAL,
+      background: '#0E1520',
+      logoControl: true,
+      logoControlPosition: naver.maps.Position.BOTTOM_LEFT,
+      mapDataControl: false,
+      scaleControl: false,
+      zoomControl: false,
+      keyboardShortcuts: false,
+      scrollWheel: false,
+      draggable: true,
+      pinchZoom: true,
+      disableDoubleClickZoom: false,
+      disableDoubleTapZoom: false
+    });
+
+    naver.maps.Event.addListener(map, 'idle', function () {
+      var center = map.getCenter();
+      var zoom = map.getZoom();
+      if (!ready) {
+        ready = true;
+        call('onReady');
+        flush();
+      }
+      call('onCenter', center.lat(), center.lng(), zoom);
+    });
+
+    naver.maps.Event.addListener(map, 'dragstart', function () {
+      if (follow) {
+        follow = false;
+        call('onFollowChanged', false);
+      }
+    });
+
+    bindLongPress();
+
+    // 인증 실패·타일 차단 등으로 지도가 그려지지 않으면 앱이 CARTO 로 넘어갈 수 있게 알린다
+    setTimeout(function () { if (!ready) fail('idle-timeout'); }, 7000);
+  }
+
+  // 브리지에서 부르는 API — 문자열 하나만 넘겨 JSON 은 여기서 푼다
+  window.PinLink = {
+    setMembers: function (json) {
+      var list = [];
+      try { list = JSON.parse(json); } catch (e) { list = []; }
+      if (typeof list === 'string') { try { list = JSON.parse(list); } catch (e) { list = []; } }
+      if (!(list instanceof Array)) list = [];
+      run(function () { applyMembers(list); });
+    },
+    setMy: function (lat, lng) { run(function () { applyMy(lat, lng); }); },
+    clearMy: function () {
+      run(function () {
+        if (myMarker) { myMarker.setMap(null); myMarker = null; }
+        lastMy = null;
+      });
+    },
+    setMeeting: function (lat, lng, name) { run(function () { applyMeeting(lat, lng, name || ''); }); },
+    clearMeeting: function () {
+      run(function () {
+        if (meetingMarker) { meetingMarker.setMap(null); meetingMarker = null; }
+      });
+    },
+    setDark: function (on) {
+      dark = !!on;
+      document.body.classList.toggle('dark', dark);
+    },
+    setPick: function (on) {
+      pick = !!on;
+      document.getElementById('pick').classList.toggle('on', pick);
+    },
+    setFollow: function (on) {
+      follow = !!on;
+      if (follow && lastMy) centerOn(lastMy.lat, lastMy.lng, null);
+    },
+    moveTo: function (lat, lng, zoom) {
+      run(function () { centerOn(lat, lng, (zoom == null ? null : zoom)); });
+    }
+  };
+
+  // 핀을 눌렀을 때 — 마커 이벤트가 닿지 않는 경우를 위해 한 번 더 받아 둔다
+  document.addEventListener('click', function (e) {
+    var el = e.target;
+    while (el && el !== document.body) {
+      if (el.getAttribute) {
+        var id = el.getAttribute('data-pin-id');
+        if (id) { tapMember(id); return; }
+      }
+      el = el.parentNode;
+    }
+  }, false);
+
+  window.addEventListener('error', function (e) {
+    if (!ready) fail('js:' + (e && e.message ? e.message : 'error'));
+  }, false);
+
+  function loadSdk() {
+    var script = document.createElement('script');
+    script.src = 'https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=' + encodeURIComponent(KEY);
+    script.onload = function () { try { init(); } catch (e) { fail('init:' + e); } };
+    script.onerror = function () { fail('sdk-load'); };
+    document.head.appendChild(script);
+  }
+
+  loadSdk();
+})();
+</script>
+</body>
+</html>

@@ -90,6 +90,9 @@ class MemberMapView @JvmOverloads constructor(
     var onFollowChanged: ((Boolean) -> Unit)? = null
     var onCenterChanged: ((lat: Double, lng: Double) -> Unit)? = null
 
+    /** 지도를 길게 눌렀을 때 — 그 자리에 약속 장소를 찍는다 */
+    var onLongPress: ((lat: Double, lng: Double) -> Unit)? = null
+
     private var members: List<Member> = emptyList()
     private var meeting: MeetingPoint? = null
     private var myLat: Double? = null
@@ -186,6 +189,15 @@ class MemberMapView @JvmOverloads constructor(
             performClick()
             handleTap(e.x, e.y)
             return true
+        }
+
+        override fun onLongPress(e: MotionEvent) {
+            if (pickMode) return
+            val perWorld = pxPerWorld()
+            val lat = worldYToLat(centerY + (e.y - height / 2.0) / perWorld)
+            var lng = worldXToLon(centerX + (e.x - width / 2.0) / perWorld)
+            lng = ((lng + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
+            if (lat.isFinite() && lng.isFinite()) onLongPress?.invoke(lat, lng)
         }
     })
 

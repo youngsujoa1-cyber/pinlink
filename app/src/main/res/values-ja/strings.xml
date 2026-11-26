@@ -85,6 +85,8 @@
 
     <string name="map_style_toggle">地図のスタイル切替</string>
     <string name="map_recenter">現在地</string>
+    <string name="map_source_badge">地図の提供元</string>
+    <string name="map_attribution_naver">© NAVER Corp. · NAVER地図</string>
     <string name="btn_meeting_pin">待ち合わせ場所</string>
     <string name="pick_mode_title">集合する場所までマップを動かしてください</string>
     <string name="pick_mode_action">ここに指定</string>

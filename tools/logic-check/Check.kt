@@ -4,6 +4,8 @@ import com.youngsu.pinlink.core.MeetingPoint
 import com.youngsu.pinlink.core.Member
 import com.youngsu.pinlink.core.PinLogic
 import com.youngsu.pinlink.core.ShareMode
+import com.youngsu.pinlink.map.MapRegion
+import com.youngsu.pinlink.map.MapSource
 import com.youngsu.pinlink.map.MapStyle
 import com.youngsu.pinlink.map.TileUrl
 import java.security.SecureRandom
@@ -16,6 +18,7 @@ import java.util.Locale
  *  - 공유 시간: 모드별 종료 시각, 남은 시간, 만료 판정, 표시 형식
  *  - 거리·좌표: 하버사인 거리, 표시 형식, 이동 판정
  *  - 지도 타일 주소: CARTO @2x URL 모양, 서브도메인 분산, 키가 없을 때 OSM 폴백
+ *  - 국내/해외 판별: 대한민국 범위, 경계값, 네이버·CARTO 전환 규칙
  *  - Firestore 직렬화: 문서 필드 모양, JSON 문자열, 이스케이프, 되읽기
  */
 var failures = 0
@@ -52,6 +55,7 @@ fun main() {
     distanceChecks()
     motionChecks()
     codecChecks()
+    regionChecks()
 
     println()
     if (failures == 0) println("ALL CHECKS PASSED")
@@ -307,4 +311,57 @@ fun codecChecks() {
     expect("style fromId unknown", MapStyle.fromId("sepia"), MapStyle.DARK)
     expect("style fromId null", MapStyle.fromId(null), MapStyle.DARK)
     expect("style cache dirs differ", MapStyle.DARK.cacheDir == MapStyle.LIGHT.cacheDir, false)
+}
+
+/**
+ * 국내/해외 판별 — 지도를 네이버(국내)와 CARTO(해외) 중 어느 것으로 그릴지 정하는 규칙
+ */
+fun regionChecks() {
+    // 대한민국 범위(위도 33.0~38.9, 경도 124.5~132.0)
+    expect("seoul is korea", MapRegion.isKorea(37.5665, 126.9780), true)
+    expect("busan is korea", MapRegion.isKorea(35.1796, 129.0756), true)
+    expect("jeju is korea", MapRegion.isKorea(33.4996, 126.5312), true)
+    expect("dokdo is korea", MapRegion.isKorea(37.2425, 131.8665), true)
+    expect("paris is not korea", MapRegion.isKorea(48.8566, 2.3522), false)
+    expect("tokyo is not korea", MapRegion.isKorea(35.6812, 139.7671), false)
+    expect("new york is not korea", MapRegion.isKorea(40.7128, -74.0060), false)
+    expect("sydney is not korea", MapRegion.isKorea(-33.8688, 151.2093), false)
+
+    // 경계값 — 안쪽은 포함, 바깥은 제외
+    expect("min lat inside", MapRegion.isKorea(33.0, 127.0), true)
+    expect("min lat outside", MapRegion.isKorea(32.999, 127.0), false)
+    expect("max lat inside", MapRegion.isKorea(38.9, 127.0), true)
+    expect("max lat outside", MapRegion.isKorea(38.901, 127.0), false)
+    expect("min lng inside", MapRegion.isKorea(37.0, 124.5), true)
+    expect("min lng outside", MapRegion.isKorea(37.0, 124.499), false)
+    expect("max lng inside", MapRegion.isKorea(37.0, 132.0), true)
+    expect("max lng outside", MapRegion.isKorea(37.0, 132.001), false)
+
+    // 값이 없거나 이상하면 국내가 아니다
+    expect("null coords", MapRegion.isKorea(null, null), false)
+    expect("nan coords", MapRegion.isKorea(Double.NaN, 127.0), false)
+    expect("zero coords", MapRegion.isKorea(0.0, 0.0), false)
+
+    // 네이버 지도에서 넘어갈 때는 여유를 둔다 (경계에서 깜빡이지 않게)
+    expect("near korea north", MapRegion.nearKorea(39.3, 127.0), true)
+    expect("near korea far north", MapRegion.nearKorea(39.6, 127.0), false)
+    expect("near korea sea", MapRegion.nearKorea(37.0, 132.5), true)
+    expect("near korea far sea", MapRegion.nearKorea(37.0, 132.7), false)
+    expect("near korea japan", MapRegion.nearKorea(35.6812, 139.7671), false)
+
+    // 전환 규칙
+    expect("no key -> carto", MapRegion.decide(MapSource.NAVER, false, 37.5665, 126.9780), MapSource.CARTO)
+    expect("korea on carto -> naver", MapRegion.decide(MapSource.CARTO, true, 37.5665, 126.9780), MapSource.NAVER)
+    expect("korea on naver stays", MapRegion.decide(MapSource.NAVER, true, 37.5665, 126.9780), MapSource.NAVER)
+    expect("overseas on carto stays", MapRegion.decide(MapSource.CARTO, true, 48.8566, 2.3522), MapSource.CARTO)
+    expect("overseas on naver -> carto", MapRegion.decide(MapSource.NAVER, true, 48.8566, 2.3522), MapSource.CARTO)
+    expect("japan on naver -> carto", MapRegion.decide(MapSource.NAVER, true, 35.6812, 139.7671), MapSource.CARTO)
+    expect("border on naver stays", MapRegion.decide(MapSource.NAVER, true, 39.3, 127.0), MapSource.NAVER)
+    expect("border on carto stays", MapRegion.decide(MapSource.CARTO, true, 39.3, 127.0), MapSource.CARTO)
+    expect("no center -> carto", MapRegion.decide(MapSource.NAVER, true, null, null), MapSource.CARTO)
+    expect("broken key -> carto", MapRegion.decide(MapSource.NAVER, false, 37.5665, 126.9780), MapSource.CARTO)
+
+    // 배지 문구
+    expect("naver badge", MapSource.NAVER.label, "NAVER")
+    expect("carto badge", MapSource.CARTO.label, "CARTO")
 }

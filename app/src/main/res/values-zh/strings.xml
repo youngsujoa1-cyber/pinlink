@@ -85,6 +85,8 @@
 
     <string name="map_style_toggle">切换地图样式</string>
     <string name="map_recenter">我的位置</string>
+    <string name="map_source_badge">地图提供方</string>
+    <string name="map_attribution_naver">© NAVER Corp. · NAVER 地图</string>
     <string name="btn_meeting_pin">集合地点</string>
     <string name="pick_mode_title">把地图移动到大家集合的地方</string>
     <string name="pick_mode_action">就在这里</string>

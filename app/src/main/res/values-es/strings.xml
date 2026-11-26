@@ -85,6 +85,8 @@
 
     <string name="map_style_toggle">Estilo del mapa</string>
     <string name="map_recenter">Mi ubicación</string>
+    <string name="map_source_badge">Proveedor del mapa</string>
+    <string name="map_attribution_naver">© NAVER Corp. · Mapa de NAVER</string>
     <string name="btn_meeting_pin">Punto de encuentro</string>
     <string name="pick_mode_title">Mueve el mapa hasta el lugar de encuentro</string>
     <string name="pick_mode_action">Marcar aquí</string>

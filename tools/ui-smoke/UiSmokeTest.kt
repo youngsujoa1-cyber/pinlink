@@ -149,6 +149,33 @@ class UiSmokeTest {
         assertNotNull(PinSession.roomCode)
     }
 
+
+    @Test
+    fun mapScreenShowsSourceBadge() {
+        val app = RuntimeEnvironment.getApplication()
+        val prefs = AppPrefs.get(app)
+        prefs.languageOnboarded = true
+        prefs.nickname = "영수"
+        prefs.roomCode = "ABC234"
+        prefs.roomOwner = true
+        prefs.shareMode = ShareMode.ALWAYS
+        prefs.startedAt = System.currentTimeMillis()
+        prefs.expiresAt = 0L
+
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        ShadowLooper.idleMainLooper()
+        layout(activity)
+        // 네이버 지도 준비 대기(9초)를 넘겨도 앱은 살아 있고, 지도는 CARTO 로 넘어간다
+        ShadowLooper.idleMainLooper(12, TimeUnit.SECONDS)
+        layout(activity)
+
+        val texts = texts(activity.window.decorView)
+        assertTrue(
+            "지도 제공자 배지(NAVER/CARTO)가 보여야 한다: $texts",
+            texts.any { it == "NAVER" || it == "CARTO" }
+        )
+    }
+
     @Test
     fun crashLogIsRecordedAndShown() {
         val app = RuntimeEnvironment.getApplication()

@@ -3,8 +3,8 @@
 친구·가족·동료가 **6자리 방 코드**로 같은 방에 들어와 서로의 위치를 한 지도에서 보는 안드로이드 앱입니다.
 플레이스토어 출시와 AdMob 광고 수익화를 전제로 만들었고, 첫 실행부터 5개 언어(한국어·영어·일본어·중국어·스페인어)를 지원합니다.
 
-- 패키지 `com.youngsu.pinlink` · versionCode `4` · versionName `1.0.3` · minSdk 26 / targetSdk 35
-- 지도: 지도 타일을 Canvas 에 직접 그리는 방식(지도 SDK 없음). 기본은 **CARTO 512×512(@2x) 베이스맵** — 어두운 지도(Dark Matter)와 밝은 지도(Voyager)를 지도 화면 우측 상단 버튼으로 1탭 전환하고, 고른 스타일은 앱에 저장됩니다. `CARTO_KEY` 가 없으면 OpenStreetMap 표준 타일로 내려갑니다.
+- 패키지 `com.youngsu.pinlink` · versionCode `5` · versionName `1.0.4` · minSdk 26 / targetSdk 35
+- 지도(하이브리드): **국내는 네이버 지도(JavaScript API v3, WebView)**, **해외는 CARTO 512×512(@2x) 베이스맵**(Canvas 직접 그리기)으로 자동 전환합니다. 대한민국 범위(위도 33.0~38.9, 경도 124.5~132.0)면 네이버, 그 밖이거나 네이버 지도가 뜨지 않으면 CARTO — 지금 떠 있는 지도는 화면 우측 상단 배지(`NAVER` / `CARTO`)에 표시합니다. 어두운/밝은 지도는 두 지도 모두에서 1탭 전환되고 고른 스타일은 앱에 저장됩니다. 네이버 키(`NAVER_MAP_CLIENT_ID`)가 없으면 전 세계를 CARTO 로만 그립니다.
 - 동기화: Firestore REST(`HttpURLConnection`) — 외부 SDK 없음. **v1.0.3 부터 PinLink 전용 무료 Firebase 프로젝트(`pinlink-live`, 서울 리전)에 실제로 연결**되어 있고, 키가 비어 있는 빌드에서는 데모 모드(친구 2명 시뮬레이션)로 내려갑니다.
 
 ## 기능
@@ -16,8 +16,8 @@
 | 공유 모드 | 계속 공유(상시 백그라운드) · 1시간 · 3시간 · 8시간 · 24시간 · 일시정지(내 위치 숨기기). 시간이 끝나면 스스로 멈춤 |
 | 백그라운드 | `foregroundServiceType="location"` 포그라운드 서비스 + 계속 뜨는 알림(중지 버튼). 앱을 닫아도 공유 |
 | 정책 | 백그라운드 위치를 요청하기 전 **명시적 안내(Prominent Disclosure)** 필수, 동의 전에는 시스템 권한 창을 띄우지 않음 |
-| 지도 | 멤버별 핀(이름·색·첫 글자, 오래된 핀은 흐리게), 내 위치 점, 내 위치로 이동 버튼, 멤버/칩을 누르면 그 멤버로 이동 |
-| 약속 장소 | 지도 정중앙 핀으로 집결 장소를 찍고 이름을 붙여 방 전체에 공유 / 지우기 |
+| 지도 | 멤버별 핀(이름·색·첫 글자, 오래된 핀은 흐리게), 내 위치 점, 내 위치로 이동 버튼, 멤버/칩을 누르면 그 멤버로 이동. 국내는 네이버 지도, 해외는 CARTO 지도로 자동 전환 |
+| 약속 장소 | 지도 정중앙 핀으로 집결 장소를 찍고 이름을 붙여 방 전체에 공유 / 지우기 · 지도를 **길게 누르면** 그 자리에 바로 약속 핀 |
 | 광고 | 화면 최하단 배너(콘텐츠 → 하단 탭 바 → 배너), 방 생성·참여 직후 전면 광고(3분 쿨다운). Google 공식 테스트 ID |
 | 정보 | 개인정보 처리방침(한국어/영어) 앱 내 WebView + `docs/privacy.html` |
 
@@ -39,6 +39,7 @@ sdk.dir=/workspace/buildenv/android-sdk
 FIREBASE_PROJECT_ID=pinlink-live         # 기본값도 pinlink-live
 FIREBASE_API_KEY=AIzaSy…                 # 비어 있으면 데모 모드(저장소에는 올리지 않음)
 CARTO_KEY=cb1_...                          # CARTO 베이스맵 키(@2x 고해상도 타일). 없으면 OpenStreetMap
+NAVER_MAP_CLIENT_ID=…                      # 네이버 클라우드 플랫폼 Dynamic Map 키(국내 지도). 없으면 전부 CARTO
 ```
 
 ## 실서버 동기화 (v1.0.3 부터 연결됨)
@@ -113,7 +114,11 @@ app/src/main/java/com/youngsu/pinlink/
   data/PinSession.kt        앱 상태 한 곳: 위치 요청·8초 업로드·폴링·만료 처리
   location/ShareService.kt  포그라운드 서비스 + 알림(중지 버튼)
   map/MapTileProvider.kt    OSM 타일 다운로드·메모리/디스크 캐시
-  ui/widget/MemberMapView.kt  지도 그리기(팬·핀치·핀 탭·약속 장소 핀·고정 핀)
+  map/MapRegion.kt          국내/해외 판별 + 네이버·CARTO 전환 규칙 (안드로이드 없음 → JVM 검사)
+  ui/widget/MemberMapView.kt  CARTO 지도 그리기(팬·핀치·핀 탭·약속 장소 핀·고정 핀·길게 누르기)
+  ui/widget/NaverMapView.kt   네이버 지도 WebView + JS 브리지(중심·핀 탭·길게 누르기·실패 알림)
+  ui/widget/HybridMapView.kt  두 지도를 한 API 로 — 국내/해외에 따라 자동 전환
+  assets/naver_map.html       네이버 지도 페이지(핀·내 위치·깃발·고정 핀·다크 모드는 CSS 색반전)
   ui/MainActivity.kt        탭(지도·방·설정) + 배너 + 권한 흐름 + 전면 광고
   ui/MapScreen · RoomScreen · SettingsScreen · Dialogs · Onboarding · PrivacyActivity
 ```
@@ -134,7 +139,36 @@ app/src/main/java/com/youngsu/pinlink/
 - APK 확인(v1.0.3): `aapt2 dump badging` 으로 패키지 `com.youngsu.pinlink` / versionCode 4 / 1.0.3 / targetSdk 35 / `INTERNET` 권한 / 권한 9종, `foregroundServiceType=0x8(location)` 서비스, `assets/privacy.html`, 5개 언어 문자열, adaptive icon 포함
 - Firestore REST 요청 모양 검증: 앱이 보내는 그대로의 본문을 실제 Firestore 엔드포인트로 보내 **400(깨진 JSON)과 달리 403(규칙 거부)** 응답을 확인 — 즉 본문은 파싱되고 보안 규칙에서만 막힌다
 - **실서버 왕복(v1.0.3, `pinlink-live`)**: 방 만들기 → 방 조회 → 약속 찍기 → 약속 지우기 → 멤버 위치 업로드 → 멤버 목록 → 나가기 전부 HTTP 200. 규칙 거부도 확인(소문자 코드 403 · 범위 밖 좌표 403 · 방 문서 삭제 403 · code 없는 방 문서 403). 검증 스크립트 `tool-results/pinlink-live-test.sh`
-- **못 한 것**: 이 환경에는 기기·에뮬레이터가 없어 실제 화면 렌더링, GPS 측정, 백그라운드 서비스 유지, 광고 노출, **두 기기 사이의 실제 위치 동기화**는 설치 후 확인이 필요합니다(서버 쪽 왕복은 위처럼 검증).
+- v1.0.4 국내/해외 판별 검사 30개 추가(`tools/logic-check/run.sh`): 대한민국 경계값(위도 33.0/38.9, 경도 124.5/132.0), 파리·도쿄·뉴욕·시드니, 여유폭(±0.6°), 전환 규칙(키 없음·실패·중심 없음 → CARTO)
+- 네이버 지도 인증 검증(2026-11-26, 실제 키): `curl -sI` → HTTP 200 · JS 326KB 정상 수신. 런타임 인증 엔드포인트 `https://oapi.map.naver.com/v3/auth?ncpKeyId=…&url=https://youngsujoa1-cyber.github.io/pinlink/` → `{"result":{"apiQuota":"200000","apiKeyInfo":"apiKey:map/webApiGroup"}}`, 같은 키로 등록되지 않은 주소(`evil.example.com`)·가짜 키는 HTTP 401 `Authentication Failed` — 등록한 도메인에서만 통과하는 것을 확인
+- 네이버 지도 JS 실제 동작(같은 키, 등록 도메인 페이지에서 SDK 로드): 지도 생성·중심/줌 조회 정상, `nrbe.pstatic.net/styles/basic/…png` 타일 요청 발생(`performance` 리소스로 확인) → 인증 통과 후 타일까지 내려오는 것 확인
+- 지도 페이지 JS를 Duktape 로 스텁 렌더링해 26개 동작 검사: 멤버 마커 생성·재사용·삭제, 이름표/첫 글자/색/투명도/선택 링, 내 위치 점, 약속 깃발, 이동(`moveTo`), 다크 클래스 on/off, 고정 핀 on/off, 따라가기 on/off, 중심 콜백
+- `tools/ui-smoke/run.sh` 에 지도 제공자 배지 검사 추가 — 네이버 지도가 준비되지 않는 환경에서 9초 뒤 CARTO 로 넘어가고 앱은 살아 있는지(13개 테스트 전부 통과)
+- **못 한 것**: 이 환경에는 기기·에뮬레이터가 없어 실제 화면 렌더링, GPS 측정, 백그라운드 서비스 유지, 광고 노출, **두 기기 사이의 실제 위치 동기화**, **네이버 지도 위에서의 핀·핀치 체감**은 설치 후 확인이 필요합니다(서버·인증·타일 요청은 위처럼 검증).
+
+## v1.0.4 — 국내 네이버 지도 + 해외 CARTO (2026-11-26)
+
+**한 일**
+
+- 네이버 클라우드 플랫폼에 `PinLink` Application 등록 + Dynamic Map 키 발급(월 600만 건 무료). 등록한 Web 서비스 URL `https://youngsujoa1-cyber.github.io`, Android 패키지 `com.youngsu.pinlink`
+- 키는 `local.properties` 의 `NAVER_MAP_CLIENT_ID` → `BuildConfig` 로만 들어갑니다(공개 저장소 0건). 지도 페이지(`assets/naver_map.html`)에는 `__NCP_KEY_ID__` 자리표시자만 있고, 앱이 실행할 때 채워 넣습니다
+- `map/MapRegion.kt`: 대한민국 범위(33.0~38.9 / 124.5~132.0) 판별 + 전환 규칙(네이버 → CARTO 는 ±0.6° 여유를 두어 경계에서 깜빡이지 않음)
+- `ui/widget/NaverMapView.kt`: `https://youngsujoa1-cyber.github.io/pinlink/` 를 baseURL 로 WebView 를 열어 네이버 지도 v3 를 그립니다(등록된 주소라서 인증 통과). JS 브리지로 중심 이동·핀 탭·길게 누르기·실패를 주고받고, 9초 안에 지도가 뜨지 않거나 인증·네트워크가 실패하면 CARTO 로 넘깁니다
+- `ui/widget/HybridMapView.kt`: 두 지도를 하나의 API 로 감싸 지도 화면은 어느 쪽이 떠 있는지 몰라도 되게 했습니다. 지도 중심이 국내면 네이버, 해외로 나가면 CARTO(중심·줌 유지한 채)로 바뀌고, 우측 상단 `NAVER` / `CARTO` 배지와 저작권 표시(© NAVER Corp. / © OpenStreetMap · © CARTO)도 함께 바뀝니다
+- 기존 기능을 네이버 지도 위에서도 동일하게: 밝은/어두운 지도(어두운 쪽은 지도만 CSS 색반전, 핀은 한 번 더 반전해 원래 색 유지), 내 위치 파란 점, 멤버 핀·이름표·선택 링·오래된 핀 흐리게, 약속 장소 깃발, 방 전체 팬/핀치/두 번 탭 확대, 내 위치로 이동, 정중앙 고정 핀으로 약속 찍기
+- **길게 누르기**로 약속 장소 찍기 추가(두 지도 모두) — 누른 자리에 바로 이름 입력 창
+- 버전 `versionCode 5` / `versionName "1.0.4"`
+
+**검증**
+
+- 네이버 지도 인증: `curl` HTTP 200 + 런타임 인증 엔드포인트 결과(위 "검증한 것" 참고), 등록되지 않은 도메인·가짜 키는 401
+- `./gradlew --offline lintDebug assembleDebug` · `tools/logic-check/run.sh`(국내/해외 30개 추가) · `tools/ui-smoke/run.sh`(13개) 전부 통과
+- APK `downloads/pinlink.apk` (11.2MB) · `aapt2 dump badging` versionCode 5 / 1.0.4
+
+**남은 주의**
+
+- 네이버 지도는 무료 쿼터(월 600만 건) 안에서만 무료입니다. 지도 1장을 열 때마다 타일·인증 호출이 쌓이므로 사용자가 늘면 콘솔에서 사용량을 확인하세요
+- 네이버 지도 어두운 모드는 공식 다크 스타일이 아니라 CSS 색반전입니다(로고까지 반전됨). 네이버가 스타일맵(커스텀 스타일)을 제공하면 그쪽으로 바꾸는 편이 더 깔끔합니다
 
 ## v1.0.3 — 무료 Firebase 실서버 연결 (2026-11-26)
 
