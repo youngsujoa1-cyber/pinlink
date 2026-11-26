@@ -40,6 +40,15 @@ class UiSmokeTest {
         return out
     }
 
+    /** 화면 안의 첫 입력칸 — 채팅 입력줄 확인용 */
+    private fun findEditText(root: View): android.widget.EditText? {
+        if (root is android.widget.EditText) return root
+        if (root is ViewGroup) {
+            for (i in 0 until root.childCount) findEditText(root.getChildAt(i))?.let { return it }
+        }
+        return null
+    }
+
     private fun layout(activity: MainActivity) {
         val root = activity.window.decorView
         repeat(3) {
@@ -173,6 +182,45 @@ class UiSmokeTest {
         assertTrue(
             "지도 제공자 배지(NAVER/CARTO)가 보여야 한다: $texts",
             texts.any { it == "NAVER" || it == "CARTO" }
+        )
+    }
+
+    @Test
+    fun chatTabShowsRoomChat() {
+        val app = RuntimeEnvironment.getApplication()
+        val prefs = AppPrefs.get(app)
+        prefs.languageOnboarded = true
+        prefs.nickname = "영수"
+        prefs.roomCode = "UITEST"
+        prefs.roomOwner = true
+        prefs.shareMode = ShareMode.PAUSED
+        prefs.startedAt = 0L
+        prefs.expiresAt = 0L
+
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        ShadowLooper.idleMainLooper()
+        layout(activity)
+
+        // 하단 탭에서 채팅 열기
+        activity.findViewById<View>(R.id.nav_chat)?.performClick()
+        ShadowLooper.idleMainLooper(2, TimeUnit.SECONDS)
+        layout(activity)
+
+        val shown = texts(activity.window.decorView)
+        assertTrue("채팅 화면 제목이 보여야 한다: $shown", shown.any { it == app.getString(R.string.chat_title) })
+        assertTrue("방 코드가 채팅 화면에 보여야 한다: $shown", shown.any { it == "UITEST" })
+        assertTrue(
+            "입력 안내가 보여야 한다",
+            findEditText(activity.window.decorView)?.hint == app.getString(R.string.chat_hint)
+        )
+
+        // 메시지를 보내면 화면에 바로 말풍선이 생긴다
+        PinSession.sendChat("테스트 메시지") { }
+        ShadowLooper.idleMainLooper(2, TimeUnit.SECONDS)
+        layout(activity)
+        assertTrue(
+            "보낸 메시지가 말풍선으로 보여야 한다",
+            texts(activity.window.decorView).any { it == "테스트 메시지" }
         )
     }
 

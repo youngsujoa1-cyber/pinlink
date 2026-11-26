@@ -94,7 +94,51 @@ expect_code "그 멤버 정리" 200 "$(req DELETE "$BASE/rooms/QQQQQQ/members/$D
 expect_code "멤버 삭제 (방 나가기)" 200 "$(req DELETE "$BASE/rooms/$CODE/members/$DEVICE?key=$API_KEY")"
 expect_code "방 문서 삭제는 규칙이 거부 (403)" 403 "$(req DELETE "$BASE/rooms/$CODE?key=$API_KEY")"
 
+# ─────────────────────────────────────────────── 6) 방 채팅 (v1.0.6)
+# 메시지는 문서 ID 가 '뒤집은 시각'(MAX-ms)으로 시작해 목록 순서 = 최신 순서가 된다.
+# 규칙은 5필드·1~500자·정수 createdAtMs 만 허용하고 고치기·지우기는 막는다.
+CHAT_CODE=${CHAT_CODE:-CHAT01}    # 6자리 코드
+CHAT_NOW=$(date +%s%3N)
+CHAT_ID="b$(printf '%019d' $((9223372036854775807 - CHAT_NOW)))-check1"
+cat > "$TMP/chat.json" <<JSON
+{"fields":{"senderId":{"stringValue":"$DEVICE"},"senderName":{"stringValue":"서버검사"},"senderColor":{"stringValue":"#E5C158"},"text":{"stringValue":"채팅 검사 메시지"},"createdAtMs":{"integerValue":"$CHAT_NOW"}}}
+JSON
+expect_code "채팅 메시지 5필드 쓰기" 200 "$(req PATCH "$BASE/rooms/$CHAT_CODE/messages/$CHAT_ID?key=$API_KEY" "$TMP/chat.json")"
+expect_code "채팅 메시지 목록 (pageSize=1 · 최신 확인용)" 200 "$(req GET "$BASE/rooms/$CHAT_CODE/messages?key=$API_KEY&pageSize=1")"
+
+# 빈 글 → 403
+cat > "$TMP/chat-empty.json" <<JSON
+{"fields":{"senderId":{"stringValue":"$DEVICE"},"senderName":{"stringValue":"서버검사"},"senderColor":{"stringValue":"#E5C158"},"text":{"stringValue":""},"createdAtMs":{"integerValue":"$CHAT_NOW"}}}
+JSON
+expect_code "빈 글 메시지는 거부 (403)" 403 \
+  "$(req PATCH "$BASE/rooms/$CHAT_CODE/messages/b-empty?key=$API_KEY" "$TMP/chat-empty.json")"
+
+# 501자 → 403 (규칙 text.size() <= 500)
+TEXT501=$(head -c 501 /dev/zero | tr '\0' 'a')
+cat > "$TMP/chat-long.json" <<JSON
+{"fields":{"senderId":{"stringValue":"$DEVICE"},"senderName":{"stringValue":"서버검사"},"senderColor":{"stringValue":"#E5C158"},"text":{"stringValue":"$TEXT501"},"createdAtMs":{"integerValue":"$CHAT_NOW"}}}
+JSON
+expect_code "501자 메시지는 거부 (403)" 403 \
+  "$(req PATCH "$BASE/rooms/$CHAT_CODE/messages/b-long?key=$API_KEY" "$TMP/chat-long.json")"
+
+# 6필드 → 403 (규칙 size() <= 5)
+cat > "$TMP/chat-six.json" <<JSON
+{"fields":{"senderId":{"stringValue":"$DEVICE"},"senderName":{"stringValue":"서버검사"},"senderColor":{"stringValue":"#E5C158"},"text":{"stringValue":"6필드"},"createdAtMs":{"integerValue":"$CHAT_NOW"},"extra":{"stringValue":"x"}}}
+JSON
+expect_code "메시지 6필드는 거부 (403)" 403 \
+  "$(req PATCH "$BASE/rooms/$CHAT_CODE/messages/b-six?key=$API_KEY" "$TMP/chat-six.json")"
+
+# 보낸 메시지 고치기·지우기 → 403 (남의 대화를 못 지우게)
+sleep 1
+expect_code "보낸 메시지 고치기는 거부 (403)" 403 \
+  "$(req PATCH "$BASE/rooms/$CHAT_CODE/messages/$CHAT_ID?key=$API_KEY" "$TMP/chat.json")"
+expect_code "메시지 지우기는 거부 (403)" 403 \
+  "$(req DELETE "$BASE/rooms/$CHAT_CODE/messages/$CHAT_ID?key=$API_KEY")"
+expect_code "소문자 방 코드 메시지도 거부 (403)" 403 \
+  "$(req PATCH "$BASE/rooms/chat01/messages/b-lower?key=$API_KEY" "$TMP/chat.json")"
+
 say ""
 say "검사 방: rooms/$CODE (규칙상 방 문서는 앱에서 지울 수 없습니다 — 콘솔에서 지우면 됩니다)"
+say "채팅 검사 메시지는 rooms/$CHAT_CODE/messages 에 남습니다(규칙상 삭제 불가 — 콘솔에서 정리)"
 say "결과: $PASS 통과 · $FAIL 실패 (프로젝트 $PROJECT_ID)"
 [ "$FAIL" -eq 0 ] || exit 1

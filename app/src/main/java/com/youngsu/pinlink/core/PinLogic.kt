@@ -68,6 +68,20 @@ data class Member(
     val valid: Boolean get() = lat.isFinite() && lng.isFinite() && !(lat == 0.0 && lng == 0.0)
 }
 
+/** 방 채팅 메시지 한 건 (v1.0.6) */
+data class ChatMessage(
+    val id: String,
+    val senderId: String,
+    val senderName: String,
+    val senderColor: String,
+    val text: String,
+    val createdAtMs: Long,
+    /** 내가 보낸 메시지인가 (화면에서 오른쪽 골드 말풍선) */
+    val mine: Boolean = false
+) {
+    val valid: Boolean get() = id.isNotBlank() && text.isNotBlank() && createdAtMs > 0L
+}
+
 /** 약속 장소(집결 핀) — 방 하나에 하나 */
 data class MeetingPoint(
     val lat: Double,
@@ -270,6 +284,93 @@ object PinLogic {
         if (meters < 30.0) return false
         return meters / seconds >= MOVING_SPEED_MPS
     }
+
+    // ---------------------------------------------------------------- 방 채팅
+
+    /** 메시지 한 건의 최대 길이 — 보안 규칙(`text.size() <= 500`)과 같은 값 */
+    const val CHAT_MAX_LENGTH = 500
+
+    /** 한 번에 받아 두는 최근 메시지 수 */
+    const val CHAT_PAGE = 40
+
+    /**
+     * 입력한 글을 서버에 보낼 모양으로 다듬는다.
+     * 앞뒤 공백을 지우고, 비었거나 500자를 넘으면 null(보내지 않음).
+     */
+    fun cleanChatText(raw: String): String? {
+        val text = raw.trim()
+        if (text.isEmpty()) return null
+        if (text.length > CHAT_MAX_LENGTH) return null
+        return text
+    }
+
+    /**
+     * 메시지 문서 ID.
+     *
+     * Firestore 의 문서 목록은 **문서 ID 오름차순**으로 온다(정렬 옵션이 없다 — 하위 컬렉션
+     * runQuery 는 이 프로젝트에서 403 이었다). 그래서 ID 앞에 '뒤집은 시각'(MAX-ms)을 넣어
+     * ID 순서 = 최신 순서가 되게 한다. 그러면 `pageSize=1` 한 번으로 '새 메시지가 있는지'를
+     * 읽기 1회로 확인할 수 있다.
+     */
+    fun chatDocId(createdAtMs: Long, suffix: String): String {
+        val flipped = Long.MAX_VALUE - createdAtMs.coerceIn(0L, Long.MAX_VALUE)
+        return "b" + flipped.toString().padStart(19, '0') + "-" + suffix
+    }
+
+    /** 메시지 문서 ID → 만든 시각(ms). 형식이 다르면 0 */
+    fun chatMillisFromId(id: String): Long {
+        val core = id.removePrefix("b").substringBefore('-')
+        val flipped = core.toLongOrNull() ?: return 0L
+        return Long.MAX_VALUE - flipped
+    }
+
+    /** 문서 ID 뒤에 붙는 짧은 무작위 꼬리 (같은 밀리초에 두 사람이 보내도 겹치지 않게) */
+    fun chatSuffix(random: SecureRandom = SecureRandom(), length: Int = 6): String {
+        val builder = StringBuilder(length)
+        repeat(length) { builder.append(CODE_ALPHABET[random.nextInt(CODE_ALPHABET.length)]) }
+        return builder.toString()
+    }
+
+    /**
+     * 받아 온 메시지를 지금 목록에 합친다.
+     * 같은 ID 는 하나만 남기고(서버 값 우선), 오래된 것부터 정렬해 최근 [limit] 건만 둔다.
+     */
+    fun mergeChat(existing: List<ChatMessage>, incoming: List<ChatMessage>, limit: Int = CHAT_PAGE): List<ChatMessage> {
+        val byId = LinkedHashMap<String, ChatMessage>()
+        for (message in existing + incoming) {
+            if (!message.valid) continue
+            val previous = byId[message.id]
+            // 서버에서 온 값이 있으면 서버 값을 쓰되 '내 것' 표시는 유지한다
+            byId[message.id] = if (previous == null) message else message.copy(mine = message.mine || previous.mine)
+        }
+        return byId.values
+            .sortedWith(compareBy({ it.createdAtMs }, { it.id }))
+            .takeLast(limit)
+    }
+
+    /** 아직 읽지 않은 남의 메시지 수 — 마지막으로 읽은 시각 이후, 내가 보낸 것은 빼고 */
+    fun unreadCount(messages: List<ChatMessage>, lastReadMs: Long, myId: String): Int =
+        messages.count { it.createdAtMs > lastReadMs && it.senderId != myId }
+
+    /** 말풍선 옆에 붙는 시각 (24시간제, 기기 언어와 무관하게 숫자만) */
+    fun chatClock(createdAtMs: Long): String {
+        if (createdAtMs <= 0L) return ""
+        val format = SimpleDateFormat("HH:mm", Locale.US).apply { timeZone = TimeZone.getDefault() }
+        return format.format(Date(createdAtMs))
+    }
+
+    /** 날짜 구분선 문구 — 오늘/어제/그 외 (yyyy.MM.dd) */
+    fun chatDayLabel(dayMs: Long, nowMs: Long): String {
+        val zone = TimeZone.getDefault()
+        val day = SimpleDateFormat("yyyyMMdd", Locale.US).apply { timeZone = zone }.format(Date(dayMs))
+        val today = SimpleDateFormat("yyyyMMdd", Locale.US).apply { timeZone = zone }.format(Date(nowMs))
+        val yesterday = SimpleDateFormat("yyyyMMdd", Locale.US).apply { timeZone = zone }.format(Date(nowMs - 86_400_000L))
+        return when (day) {
+            today -> "TODAY"
+            yesterday -> "YESTERDAY"
+            else -> SimpleDateFormat("yyyy.MM.dd", Locale.US).apply { timeZone = zone }.format(Date(dayMs))
+        }
+    }
 }
 
 /**
@@ -326,6 +427,48 @@ object FirestoreCodec {
     fun memberFieldPaths(): List<String> = listOf(
         "name", "color", "lat", "lng", "battery", "sharing", "speedKmh", "staySince"
     )
+
+    /**
+     * 채팅 메시지 문서 — **정확히 5개 필드**.
+     * 게시된 규칙이 `request.resource.data.size() <= 5` 이고, 글은 1~500자,
+     * createdAtMs 는 0 보다 큰 정수여야 한다(v1.0.6 실서버 확인).
+     */
+    fun chatFields(message: ChatMessage): FirestoreFields = mapOf(
+        "senderId" to mapOf("stringValue" to message.senderId.take(64)),
+        "senderName" to mapOf("stringValue" to message.senderName.take(40)),
+        "senderColor" to mapOf("stringValue" to message.senderColor.take(9)),
+        "text" to mapOf("stringValue" to message.text.take(PinLogic.CHAT_MAX_LENGTH)),
+        "createdAtMs" to mapOf("integerValue" to message.createdAtMs.toString())
+    )
+
+    fun chatFieldPaths(): List<String> = listOf("senderId", "senderName", "senderColor", "text", "createdAtMs")
+
+    /** 문서 → 메시지. 형식이 어긋난 문서(옛 실험 문서 등)는 null 로 걸러 낸다 */
+    fun chatFrom(fields: FirestoreFields, id: String, myId: String = ""): ChatMessage? {
+        val text = str(fields, "text") ?: return null
+        val createdAt = long(fields, "createdAtMs").takeIf { it > 0L }
+            ?: timestamp(fields, "createdAt")   // 옛 문서 호환
+        if (createdAt <= 0L) return null
+        val senderId = str(fields, "senderId").orEmpty()
+        return ChatMessage(
+            id = id,
+            senderId = senderId,
+            senderName = str(fields, "senderName") ?: "Guest",
+            senderColor = str(fields, "senderColor") ?: "#E5C158",
+            text = text,
+            createdAtMs = createdAt,
+            mine = senderId.isNotEmpty() && senderId == myId
+        )
+    }
+
+    /** integerValue 는 문자열로 온다 — Long 으로 읽는다 */
+    fun long(fields: FirestoreFields, key: String): Long {
+        val value = fields[key] ?: return 0L
+        (value["integerValue"] as? String)?.toLongOrNull()?.let { return it }
+        (value["integerValue"] as? Number)?.let { return it.toLong() }
+        (value["doubleValue"] as? Double)?.let { return it.toLong() }
+        return 0L
+    }
 
     fun roomFields(code: String, owner: String, createdAt: Long, meeting: MeetingPoint?): FirestoreFields {
         val base = mutableMapOf(

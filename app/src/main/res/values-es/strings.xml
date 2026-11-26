@@ -9,6 +9,7 @@
 
     <string name="tab_map">Mapa</string>
     <string name="tab_room">Sala</string>
+    <string name="tab_chat">Chat</string>
     <string name="tab_settings">Ajustes</string>
 
     <string name="lobby_badge">GLOBAL · UBICACIÓN EN VIVO</string>
@@ -177,4 +178,18 @@
     <string name="stay_hour">%1$d h %2$d min aquí</string>
     <string name="stay_short_min">%1$d min</string>
     <string name="stay_short_hour">%1$d h</string>
+
+    <!-- Chat de la sala (v1.0.6) -->
+    <string name="chat_title">Chat de la sala</string>
+    <string name="chat_members">%1$d personas</string>
+    <string name="chat_hint">Escribe un mensaje</string>
+    <string name="chat_send">Enviar</string>
+    <string name="chat_empty">Aún no hay mensajes. ¡Saluda primero!</string>
+    <string name="chat_no_room">Crea una sala o únete con un código para chatear con sus miembros.</string>
+    <string name="chat_today">Hoy</string>
+    <string name="chat_yesterday">Ayer</string>
+    <string name="chat_counter">%1$d/%2$d</string>
+    <string name="chat_failed">No se pudo enviar el mensaje.</string>
+    <string name="chat_card_desc">Habla con todos los de esta sala</string>
+    <string name="chat_unread">%1$d nuevos</string>
 </resources>

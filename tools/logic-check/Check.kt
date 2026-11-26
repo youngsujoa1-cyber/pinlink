@@ -1,3 +1,4 @@
+import com.youngsu.pinlink.core.ChatMessage
 import com.youngsu.pinlink.core.FirestoreCodec
 import com.youngsu.pinlink.core.Fix
 import com.youngsu.pinlink.core.MeetingPoint
@@ -10,6 +11,7 @@ import com.youngsu.pinlink.map.MapStyle
 import com.youngsu.pinlink.map.TileUrl
 import java.security.SecureRandom
 import java.util.Locale
+import java.util.TimeZone
 
 /**
  * PinLink 순수 로직 검증 (안드로이드 없이 JVM 에서 실행)
@@ -20,6 +22,7 @@ import java.util.Locale
  *  - 지도 타일 주소: CARTO @2x URL 모양, 서브도메인 분산, 키가 없을 때 OSM 폴백
  *  - 국내/해외 판별: 대한민국 범위, 경계값, 네이버·CARTO 전환 규칙
  *  - Firestore 직렬화: 문서 필드 모양, JSON 문자열, 이스케이프, 되읽기
+ *  - 방 채팅: 글 다듬기, 문서 ID(뒤집은 시각) 순서, 합치기·읽지 않음, 시각 표시, 5필드
  */
 var failures = 0
 
@@ -56,6 +59,7 @@ fun main() {
     motionChecks()
     speedChecks()
     stayChecks()
+    chatChecks()
     codecChecks()
     regionChecks()
 
@@ -424,4 +428,99 @@ fun regionChecks() {
     // 배지 문구
     expect("naver badge", MapSource.NAVER.label, "NAVER")
     expect("carto badge", MapSource.CARTO.label, "CARTO")
+}
+
+/**
+ * 방 채팅 (v1.0.6)
+ *
+ *  - 글 다듬기: 앞뒤 공백 제거, 빈 글·500자 초과 거르기
+ *  - 문서 ID: '뒤집은 시각'이라 ID 오름차순 = 최신 순서 (목록 API 에 정렬 옵션이 없어서)
+ *  - 합치기·읽지 않음·시각 표시, Firestore 5필드(규칙의 size() <= 5 와 같은 모양)
+ */
+fun chatChecks() {
+    // ---------------------------------------------------------------- 글 다듬기
+    expect("chat trim", PinLogic.cleanChatText("  안녕하세요  "), "안녕하세요")
+    expect("chat blank -> null", PinLogic.cleanChatText("   "), null)
+    expect("chat empty -> null", PinLogic.cleanChatText(""), null)
+    expect("chat newline inside kept", PinLogic.cleanChatText("a\nb"), "a\nb")
+    expect("chat 500 ok", PinLogic.cleanChatText("가".repeat(500))?.length, 500)
+    expect("chat 501 -> null", PinLogic.cleanChatText("가".repeat(501)), null)
+    expect("chat limit matches rules", PinLogic.CHAT_MAX_LENGTH, 500)
+
+    // ------------------------------------------------------------ 메시지 문서 ID
+    val now = 1_795_689_757_911L
+    val newer = now + 10_000L
+    val idNow = PinLogic.chatDocId(now, "ABC234")
+    val idNewer = PinLogic.chatDocId(newer, "ABC234")
+    expect("chat id prefix", idNow.startsWith("b"), true)
+    expect("chat id has 19-digit flipped time", idNow.substring(1, 20).length, 19)
+    expect("chat id suffix", idNow.endsWith("-ABC234"), true)
+    expect("newer id sorts first (smaller)", idNewer < idNow, true)
+    expect("chat id time round-trip", PinLogic.chatMillisFromId(idNow), now)
+    expect("chat id time round-trip newer", PinLogic.chatMillisFromId(idNewer), newer)
+    expect("chat id broken -> 0", PinLogic.chatMillisFromId("nonsense"), 0L)
+    expect("chat id ignores extra dashes", PinLogic.chatMillisFromId(idNow + "-x"), now)
+
+    val suffix = PinLogic.chatSuffix()
+    expect("chat suffix length", suffix.length, 6)
+    expect("chat suffix charset", suffix.all { it in PinLogic.CODE_ALPHABET }, true)
+    val ids = (1..500).map { PinLogic.chatDocId(now, PinLogic.chatSuffix()) }
+    expect("chat ids unique in same ms", ids.toSet().size, ids.size)
+
+    // ------------------------------------------------------------- 합치기·읽음
+    fun msg(id: String, text: String, at: Long, sender: String = "friend", mine: Boolean = false) =
+        ChatMessage(id, sender, "친구", "#E5C158", text, at, mine)
+
+    val a = msg("a", "하나", now)
+    val b = msg("b", "둘", now + 1_000L)
+    val mine = ChatMessage("m", "me", "나", "#E5C158", "내 글", now + 2_000L, mine = true)
+    val merged = PinLogic.mergeChat(listOf(b, a), listOf(a, mine))
+    expect("merge sorted oldest first", merged.map { it.text }, listOf("하나", "둘", "내 글"))
+    expect("merge dedupes by id", merged.size, 3)
+    expect("merge keeps mine flag", merged.last().mine, true)
+    val limited = PinLogic.mergeChat(listOf(a, b, mine), listOf(msg("c", "셋", now + 3_000L)), limit = 2)
+    expect("merge keeps latest N", limited.map { it.text }, listOf("셋", "내 글").reversed())
+    expect("merge drops invalid", PinLogic.mergeChat(emptyList(), listOf(msg("x", " ", now))), emptyList<ChatMessage>())
+
+    expect("unread counts others", PinLogic.unreadCount(merged, now, "me"), 1)
+    expect("unread excludes mine", PinLogic.unreadCount(merged, now + 1_500L, "me"), 0)
+    expect("unread none after read", PinLogic.unreadCount(merged, now + 5_000L, "me"), 0)
+
+    // --------------------------------------------------------------- 시각 표시
+    TimeZone.setDefault(TimeZone.getTimeZone("Asia/Seoul"))
+    expect("chat clock", PinLogic.chatClock(now), "19:42")
+    expect("chat clock zero", PinLogic.chatClock(0L), "")
+    val dayNow = 1_795_680_000_000L                 // 2026-11-26 17:00 KST
+    expect("chat day today", PinLogic.chatDayLabel(dayNow, dayNow + 3_600_000L), "TODAY")
+    expect("chat day yesterday", PinLogic.chatDayLabel(dayNow - 86_400_000L, dayNow), "YESTERDAY")
+    expect("chat day older", PinLogic.chatDayLabel(dayNow - 3 * 86_400_000L, dayNow), "2026.11.23")
+
+    // ------------------------------------------------------ Firestore 5필드 문서
+    val fields = FirestoreCodec.chatFields(mine)
+    expect("chat doc field count", fields.size, 5)
+    expect("chat doc fields match rules", FirestoreCodec.chatFieldPaths().sorted(), fields.keys.sorted())
+    expect("chat doc text", FirestoreCodec.str(fields, "text"), "내 글")
+    expect("chat doc sender", FirestoreCodec.str(fields, "senderId"), "me")
+    expect("chat doc createdAtMs type", fields["createdAtMs"]?.keys?.first(), "integerValue")
+    val json = FirestoreCodec.documentJson(fields)
+    expectTrue("chat json has integerValue", json.contains("\"integerValue\":\"${now + 2_000L}\""))
+    expectTrue("chat json escapes quote", FirestoreCodec.documentJson(FirestoreCodec.chatFields(
+        ChatMessage("q", "me", "나", "#E5C158", "따옴표 \" 와 줄바꿈\n", now))).contains("\\\""))
+
+    val parsed = FirestoreCodec.chatFrom(fields, "abc", myId = "me")
+    expect("chat parse text", parsed?.text, "내 글")
+    expect("chat parse mine", parsed?.mine, true)
+    expect("chat parse not mine", FirestoreCodec.chatFrom(fields, "abc", myId = "other")?.mine, false)
+    expect("chat parse keeps time", parsed?.createdAtMs, now + 2_000L)
+    expect("chat parse name limit", FirestoreCodec.str(FirestoreCodec.chatFields(
+        ChatMessage("n", "s", "가".repeat(60), "#FFFFFF", "x", now)), "senderName")?.length, 40)
+    expect("chat parse text limit", FirestoreCodec.str(FirestoreCodec.chatFields(
+        ChatMessage("t", "s", "이름", "#FFFFFF", "가".repeat(700), now)), "text")?.length, 500)
+    expect("chat parse missing text -> null", FirestoreCodec.chatFrom(mapOf("createdAtMs" to mapOf("integerValue" to "1")), "id"), null)
+    expect("chat parse missing time -> null", FirestoreCodec.chatFrom(mapOf("text" to mapOf("stringValue" to "x")), "id"), null)
+    expect("chat parse legacy timestamp", FirestoreCodec.chatFrom(
+        mapOf(
+            "text" to mapOf("stringValue" to "옛 문서"),
+            "createdAt" to mapOf("timestampValue" to FirestoreCodec.isoUtc(now))
+        ), "id")?.createdAtMs, now - 911L)   // ISO 는 초 단위까지만 담는다
 }

@@ -3,7 +3,7 @@
 친구·가족·동료가 **6자리 방 코드**로 같은 방에 들어와 서로의 위치를 한 지도에서 보는 안드로이드 앱입니다.
 플레이스토어 출시와 AdMob 광고 수익화를 전제로 만들었고, 첫 실행부터 5개 언어(한국어·영어·일본어·중국어·스페인어)를 지원합니다.
 
-- 패키지 `com.youngsu.pinlink` · versionCode `6` · versionName `1.0.5` · minSdk 26 / targetSdk 35
+- 패키지 `com.youngsu.pinlink` · versionCode `7` · versionName `1.0.6` · minSdk 26 / targetSdk 35
 - 지도(하이브리드): **국내는 네이버 지도(JavaScript API v3, WebView)**, **해외는 CARTO 512×512(@2x) 베이스맵**(Canvas 직접 그리기)으로 자동 전환합니다. 대한민국 범위(위도 33.0~38.9, 경도 124.5~132.0)면 네이버, 그 밖이거나 네이버 지도가 뜨지 않으면 CARTO — 지금 떠 있는 지도는 화면 우측 상단 배지(`NAVER` / `CARTO`)에 표시합니다. 어두운/밝은 지도는 두 지도 모두에서 1탭 전환되고 고른 스타일은 앱에 저장됩니다. 네이버 키(`NAVER_MAP_CLIENT_ID`)가 없으면 전 세계를 CARTO 로만 그립니다.
 - 동기화: Firestore REST(`HttpURLConnection`) — 외부 SDK 없음. **v1.0.3 부터 PinLink 전용 무료 Firebase 프로젝트(`pinlink-live`, 서울 리전)에 실제로 연결**되어 있고, 키가 비어 있는 빌드에서는 데모 모드(친구 2명 시뮬레이션)로 내려갑니다.
 
@@ -19,6 +19,7 @@
 | 지도 | 멤버별 핀(이름·색·첫 글자, 오래된 핀은 흐리게), 내 위치 점, 내 위치로 이동 버튼, 멤버/칩을 누르면 그 멤버로 이동. 국내는 네이버 지도, 해외는 CARTO 지도로 자동 전환 |
 | 약속 장소 | 지도 정중앙 핀으로 집결 장소를 찍고 이름을 붙여 방 전체에 공유 / 지우기 · 지도를 **길게 누르면** 그 자리에 바로 약속 핀 |
 | 속도·체류 (v1.0.5) | GPS 속도를 km/h 로 환산해 내 속도 칩(`42 km/h`)·멤버 카드·방 목록에 표시. 2km/h 미만은 정지로 보고 **머문 시간**(`12분째 머무름`, 1분 미만 `방금 도착`)으로 바뀝니다. 70m 넘게 벗어나거나 움직이면 체류 시간이 새로 시작되고, Firestore `staySince` 로 함께 동기화됩니다 |
+| **방 채팅 (v1.0.6)** | 방 안 사람들끼리 실시간 대화. 하단 `채팅` 탭 + 지도 우상단 채팅 버튼·방 화면 채팅 카드로 열고, 열어 둔 동안 3초마다 새 메시지를 확인합니다. 내 말풍선은 오른쪽 골드, 남의 말풍선은 왼쪽 유리판 + 아바타 색. 읽지 않은 메시지는 탭 배지(`9+`)·지도 버튼 배지·방 카드에 표시되고, 한 건 500자까지. 위치를 숨겨도 대화는 계속됩니다 |
 | 디자인 (v1.0.5) | 딥 옵시디언/차콜 글라스 + 샴페인 골드 · 플래티넘 · 시안 포인트. 지도 위 칩은 반투명 다크 글라스 + 1dp 테두리. 아바타 색 팔레트도 샴페인·플래티넘·시안 톤으로 교체(예전 기본 민트는 한 번만 새 기본값으로 이동) |
 | 광고 | 화면 최하단 배너(콘텐츠 → 하단 탭 바 → 배너), 방 생성·참여 직후 전면 광고(3분 쿨다운). Google 공식 테스트 ID |
 | 정보 | 개인정보 처리방침(한국어/영어) 앱 내 WebView + `docs/privacy.html` |
@@ -91,6 +92,22 @@ service cloud.firestore {
               || (request.resource.data.name is string && request.resource.data.name.size() <= 40));
         allow delete: if true;  // 나가기
       }
+
+      match /messages/{msgId} {
+        allow read: if true;
+        allow create: if okCode(code) && request.resource.data.size() <= 5
+          && request.resource.data.senderId is string
+          && request.resource.data.senderId.size() > 0 && request.resource.data.senderId.size() <= 64
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500
+          && request.resource.data.createdAtMs is int && request.resource.data.createdAtMs > 0
+          && (!request.resource.data.keys().hasAny(['senderName'])
+              || (request.resource.data.senderName is string && request.resource.data.senderName.size() <= 40))
+          && (!request.resource.data.keys().hasAny(['senderColor'])
+              || (request.resource.data.senderColor is string && request.resource.data.senderColor.size() <= 9));
+        allow update: if false;  // 보낸 메시지는 고칠 수 없다
+        allow delete: if false;  // 방 대화를 지우지 못하게 한다
+      }
     }
 
     match /{document=**} { allow read, write: if false; }
@@ -103,6 +120,7 @@ service cloud.firestore {
 ```
 rooms/{code}                     code, owner, createdAt, active, meetingLat/Lng/Name/By/At
 rooms/{code}/members/{deviceId}  name, color, lat, lng, battery, sharing, speedKmh, staySince
+rooms/{code}/messages/{msgId}    senderId, senderName, senderColor, text, createdAtMs  (v1.0.6)
 ```
 
 > **멤버 문서는 정확히 8필드**입니다. 게시된 규칙이 `request.resource.data.size() <= 8` 이라 9번째 필드를 보내면 403 입니다(v1.0.5 실서버 확인). 그래서 v1.0.5 에서 `moving`(속도로 계산)과 `updatedAt`(문서의 `updateTime` 사용)을 문서에서 빼고 `speedKmh`·`staySince` 를 넣었습니다 — **규칙은 바꾸지 않아도 됩니다.**
@@ -127,7 +145,8 @@ app/src/main/java/com/youngsu/pinlink/
   ui/widget/HybridMapView.kt  두 지도를 한 API 로 — 국내/해외에 따라 자동 전환
   assets/naver_map.html       네이버 지도 페이지(핀·내 위치·깃발·고정 핀·다크 모드는 CSS 색반전)
   ui/StayText.kt            체류 시간 문구(방금 도착 / 12분째 머무름)
-  ui/MainActivity.kt        탭(지도·방·설정) + 배너 + 권한 흐름 + 전면 광고 + 실패 사유 토스트
+  ui/MainActivity.kt        탭(지도·방·채팅·설정) + 배너 + 권한 흐름 + 전면 광고 + 실패 사유 토스트 + 채팅 배지
+  ui/ChatScreen.kt          방 채팅 화면(말풍선·날짜 구분·입력·읽지 않음) — v1.0.6
   ui/MapScreen · RoomScreen · SettingsScreen · Dialogs · Onboarding · PrivacyActivity
 ```
 
@@ -143,6 +162,10 @@ app/src/main/java/com/youngsu/pinlink/
 ## 검증한 것 / 못 한 것
 
 - `./gradlew --offline lintDebug assembleDebug` 통과 (lint error 0, v1.0.5)
+- `./gradlew --offline lintDebug assembleDebug` 통과 (lint error 0, v1.0.6)
+- `bash tools/logic-check/run.sh` — v1.0.6 **246 PASS / 0 FAIL** (방 채팅 47개 추가: 글 다듬기·문서 ID 순서·합치기·읽지 않음·시각·5필드)
+- `bash tools/server-check/run.sh` — v1.0.6 실서버 **20/20 통과**: (v1.0.5 의 12개) + 채팅 메시지 5필드 200, 목록 200, 빈 글·501자·6필드·고치기·지우기·소문자 코드 403
+- `bash tools/ui-smoke/run.sh` — v1.0.6 **14개 통과** (채팅 탭: 방 코드·빈 대화·입력창·보낸 말풍선)
 - `bash tools/server-check/run.sh` — v1.0.5 실서버 **12개 검사 전부 통과**: 방 생성·조회, 약속 찍기/지우기(updateMask), **방이 없을 때 약속 PATCH 는 403(버그 재현)**, 멤버 8필드(speedKmh·staySince) 200, **9필드 403**, 방 없는 멤버 쓰기 200, 멤버 삭제 200, 방 문서 삭제 403
 - JVM 로직 검사 **전부 통과** (`tools/logic-check/run.sh`, v1.0.3 에서 약속 마스크 검사 4개 추가): 방 코드 생성·정규화(전각 문자 포함), 모드별 종료 시각·남은 시간·만료, 하버사인 거리, 이동 판정, Firestore 필드·JSON 직렬화(이스케이프·숫자 표기), 문서 되읽기
 - APK 확인(v1.0.3): `aapt2 dump badging` 으로 패키지 `com.youngsu.pinlink` / versionCode 4 / 1.0.3 / targetSdk 35 / `INTERNET` 권한 / 권한 9종, `foregroundServiceType=0x8(location)` 서비스, `assets/privacy.html`, 5개 언어 문자열, adaptive icon 포함
@@ -154,6 +177,46 @@ app/src/main/java/com/youngsu/pinlink/
 - 지도 페이지 JS를 Duktape 로 스텁 렌더링해 26개 동작 검사 (`python3 tools/map-js-check/check.py`, `pip install dukpy`): 멤버 마커 생성·재사용·삭제, 이름표/첫 글자/색/투명도/선택 링, 내 위치 점, 약속 깃발, 이동(`moveTo`), 다크 클래스 on/off, 고정 핀 on/off, 따라가기 on/off, 중심 콜백
 - `tools/ui-smoke/run.sh` 에 지도 제공자 배지 검사 추가 — 네이버 지도가 준비되지 않는 환경에서 9초 뒤 CARTO 로 넘어가고 앱은 살아 있는지(13개 테스트 전부 통과)
 - **못 한 것**: 이 환경에는 기기·에뮬레이터가 없어 실제 화면 렌더링, GPS 측정, 백그라운드 서비스 유지, 광고 노출, **두 기기 사이의 실제 위치 동기화**, **네이버 지도 위에서의 핀·핀치 체감**은 설치 후 확인이 필요합니다(서버·인증·타일 요청은 위처럼 검증).
+
+## v1.0.6 — 방 안 실시간 채팅 (2026-11-26)
+
+**요청**: "방 안 사람들끼리 채팅할 수 있게도 할 수 있니?" → `v1.0.6` 으로 추가.
+
+**서버(보안 규칙)** — `pinlink-live` Firestore 규칙을 콘솔에서 확장·게시(오늘 19:47, 성공)
+
+- 새 컬렉션 `rooms/{code}/messages/{msgId}`: 읽기 공개 / **만들기만** 허용 / 고치기·지우기 금지(대화 통째 삭제 방지)
+- 규칙이 강제하는 모양: 정확히 **5필드** `senderId`(1~64자)·`senderName`(≤40)·`senderColor`(≤9)·`text`(1~500자)·`createdAtMs`(0보다 큰 정수)
+- 원본은 저장소의 `firestore.rules`(주석 포함) · 콘솔에 올리는 한 줄 본문은 `firestore.rules.oneline` (`python3 tools/rules-oneline.py` 로 생성/검증)
+
+**메시지 저장 방식 — 왜 `runQuery` 를 안 쓰는가**
+
+- Firestore REST 에는 `GET .../messages` 의 정렬 옵션이 없고, `POST ...:runQuery`(orderBy/where)는 **하위 컬렉션에서 403 PERMISSION_DENIED** 였습니다(같은 실행에서 `rooms` 루트 컬렉션은 200 — 규칙 문제가 아니라 이 프로젝트의 REST 경로 문제).
+- 대신 문서 ID 를 **뒤집은 시각**(`b` + `MAX-ms` 19자 + `-무작위6자`)으로 만들어 **ID 오름차순 = 최신 순서**가 되게 했습니다. 그러면 `pageSize=1`(읽기 1회)로 새 메시지 유무를 확인하고, 새 게 있을 때만 최근 40건(읽기 40회)을 받아 옵니다.
+- 실서버 확인: 같은 밀리초에 보내도 ID 가 겹치지 않고(500건), `pageSize=1` 이 항상 가장 최근 메시지를 돌려줍니다.
+
+**앱**
+
+- `core/PinLogic.kt`: `ChatMessage`·`cleanChatText`(앞뒤 공백·1~500자)·`chatDocId`/`chatMillisFromId`·`mergeChat`(ID 중복 제거+최근 N건)·`unreadCount`·`chatClock`·`chatDayLabel`
+- `core/FirestoreCodec`: `chatFields`/`chatFrom`/`chatFieldPaths` — 5필드·`createdAtMs` 는 `integerValue`(초 단위 ISO 는 밀리초가 잘려 같은 초 메시지 순서가 깨짐)
+- `data/PinCloud.kt`: `SyncEngine.sendMessage`/`messages` — CloudEngine(Firestore REST) + DemoEngine(메모리)
+- `data/PinSession.kt`: 3초(채팅 열었을 때)·2초(닫았을 때는 20초) 폴링, 읽지 않음 수, 낙관적 전송(실패하면 거둠). 채팅 폴링은 **위치 공유와 별개** — 위치를 숨겨도 대화는 계속됩니다
+- `ui/ChatScreen.kt` (신규): 유리판 헤더(방 코드·인원) · 날짜 구분선(오늘/어제/날짜) · 내 말풍선은 오른쪽 골드, 남의 것은 왼 쪽 유리판+아바타 · 400자부터 글자 수 · 500자 제한 · 빈 대화 안내 · 방이 없으면 만들기/참여 버튼
+- 하단 탭 **`채팅`** 추가(+`BadgeDrawable` 읽지 않음) · 지도 우상단 채팅 버튼(배지) · 방 화면 `방 채팅` 카드(새 메시지 수)
+- 5개 언어 문자열 13개씩 추가(ko/en/ja/zh/es), 아이콘 `ic_chat`·`ic_send`(호 명령 없는 단순 path — v1.0.1 크래시 재발 방지)
+- `PinSession.init` 이 **Application 이 바뀌면 다시 초기화**하도록 수정(화면 검사 도구가 시험마다 새 Application 을 만들기 때문에 필요; 진짜 앱에서는 같은 컨텍스트라 한 번만 돕니다)
+- 개인정보 처리방침(앱 내·`docs/privacy.html`)에 **방 채팅** 항목 추가(내용·닉네임·시각이 방 서버에 저장됨, 보낸 메시지는 수정·삭제 불가)
+
+**검증**
+
+- JVM **246 PASS** · 실서버 **20/20** · Robolectric **14개** · `lintDebug`·`assembleDebug` 통과
+- APK `downloads/pinlink.apk` — `aapt2 dump badging` versionCode **7** / **1.0.6**, 11,320,299 B, debug 서명(`CN=Android Debug`), 5개 언어 `chat_title`(ko `방 채팅`, ja `ルームチャット`, zh `房间聊天`, es `Chat de la sala`), `ic_chat`·`ic_send` 포함
+
+**남은 주의**
+
+- **두 기기 사이 실제 채팅**은 설치 후 확인이 필요합니다(서버 왕복은 검증).
+- 검사용 대화가 `rooms/CHAT01/messages`·`rooms/CHKCHT/messages`·`rooms/CHKMSG/messages`·`rooms/UITEST/messages` 에 남습니다 — 규칙상 메시지는 지울 수 없어 **Firebase 콘솔에서만** 정리됩니다.
+- 메시지는 방마다 계속 쌓입니다(최근 100건만 앱에 보이지만 서버에는 남음). 지울 수 없게 둔 대신, 문서가 많아지면 콘솔에서 오래된 방째로 정리하면 됩니다.
+- 읽지 않음 배지는 앱이 켜져 있는 동안만 생깁니다(푸시 알림 없음). 알림이 필요하면 FCM 추가가 다음 단계입니다.
 
 ## v1.0.5 — "서버에 연결하지 못했어요" 원인과 수정 + 속도·체류·프리미엄 다크 (2026-11-26)
 

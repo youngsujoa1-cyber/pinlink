@@ -1,0 +1,67 @@
+rules_version = '2';
+
+// PinLink (pinlink-live) — Firestore 보안 규칙
+//
+// 앱에는 로그인이 없다. 방 코드(6자리)를 아는 사람이 그 방의 멤버이고,
+// 그래서 읽기는 공개, 쓰기는 '모양'을 규칙으로 좁힌다(스팸·거대 문서 방지).
+//
+//   rooms/{code}                     code, owner, createdAt, active, meeting*(5)
+//   rooms/{code}/members/{deviceId}  name, color, lat, lng, battery, sharing, speedKmh, staySince (정확히 8)
+//   rooms/{code}/messages/{msgId}    senderId, senderName, senderColor, text, createdAtMs (정확히 5)
+//
+// v1.0.6 에서 messages 를 추가했다. 메시지는 만들기만 되고 고치거나 지울 수 없다
+// (지우기를 허용하면 코드를 아는 누군가가 남의 대화를 통째로 지울 수 있다).
+//
+// 주의: Firebase 콘솔 규칙 편집기는 이 파일을 한 줄로 저장하고 '//' 주석을 먹는다.
+// 콘솔에 올리는 본문은 firestore.rules.oneline (python3 tools/rules-oneline.py 로 생성).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function okCode(c) {
+      return c is string && c.matches('^[A-Z0-9]{6}$');
+    }
+
+    match /rooms/{code} {
+      allow read: if true;
+      allow create, update: if okCode(code) && request.resource.data.size() <= 14
+        && request.resource.data.code == code
+        && (!request.resource.data.keys().hasAny(['owner'])
+            || (request.resource.data.owner is string && request.resource.data.owner.size() <= 40))
+        && (!request.resource.data.keys().hasAny(['meetingName'])
+            || (request.resource.data.meetingName is string && request.resource.data.meetingName.size() <= 60))
+        && (!request.resource.data.keys().hasAny(['meetingBy'])
+            || (request.resource.data.meetingBy is string && request.resource.data.meetingBy.size() <= 40));
+      allow delete: if false;   // 방 문서는 앱에서 지우지 않는다(남용 방지)
+
+      match /members/{deviceId} {
+        allow read: if true;
+        allow create, update: if okCode(code) && request.resource.data.size() <= 8
+          && request.resource.data.lat is number && request.resource.data.lat >= -90 && request.resource.data.lat <= 90
+          && request.resource.data.lng is number && request.resource.data.lng >= -180 && request.resource.data.lng <= 180
+          && (!request.resource.data.keys().hasAny(['name'])
+              || (request.resource.data.name is string && request.resource.data.name.size() <= 40));
+        allow delete: if true;  // 나가기
+      }
+
+      // v1.0.6 방 채팅
+      match /messages/{msgId} {
+        allow read: if true;
+        allow create: if okCode(code)
+          && request.resource.data.size() <= 5
+          && request.resource.data.senderId is string
+          && request.resource.data.senderId.size() > 0 && request.resource.data.senderId.size() <= 64
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500
+          && request.resource.data.createdAtMs is int && request.resource.data.createdAtMs > 0
+          && (!request.resource.data.keys().hasAny(['senderName'])
+              || (request.resource.data.senderName is string && request.resource.data.senderName.size() <= 40))
+          && (!request.resource.data.keys().hasAny(['senderColor'])
+              || (request.resource.data.senderColor is string && request.resource.data.senderColor.size() <= 9));
+        allow update: if false;  // 보낸 메시지는 고칠 수 없다
+        allow delete: if false;  // 방 대화를 지우지 못하게 한다
+      }
+    }
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}

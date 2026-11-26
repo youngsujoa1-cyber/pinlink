@@ -55,6 +55,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var mapScreen: MapScreen
     private lateinit var roomScreen: RoomScreen
+    private lateinit var chatScreen: ChatScreen
     private lateinit var settingsScreen: SettingsScreen
 
     private var currentTab = R.id.nav_map
@@ -177,6 +178,7 @@ class MainActivity : AppCompatActivity() {
 
         mapScreen = MapScreen(this)
         roomScreen = RoomScreen(this)
+        chatScreen = ChatScreen(this)
         settingsScreen = SettingsScreen(this)
 
         val startTab = savedInstanceState?.getInt(STATE_TAB) ?: R.id.nav_map
@@ -242,17 +244,45 @@ class MainActivity : AppCompatActivity() {
     // ------------------------------------------------------------------- 탭
 
     private fun selectTab(itemId: Int) {
+        val leavingChat = currentTab == R.id.nav_chat && itemId != R.id.nav_chat
         currentTab = itemId
         val screen: View = when (itemId) {
             R.id.nav_room -> roomScreen.view
+            R.id.nav_chat -> chatScreen.view
             R.id.nav_settings -> settingsScreen.view
             else -> mapScreen.view
         }
+        if (leavingChat) PinSession.closeChat()
+        if (itemId == R.id.nav_chat) PinSession.openChat()
         content.removeAllViews()
         content.addView(screen, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
         ))
+        updateChatBadge()
         refreshSoon()
+    }
+
+    /** 채팅 탭으로 이동 (지도·방 화면의 채팅 버튼) */
+    fun openChatTab() {
+        if (!PinSession.hasRoom()) {
+            toast(getString(R.string.chat_no_room))
+            return
+        }
+        if (currentTab == R.id.nav_chat) return
+        bottomNav.selectedItemId = R.id.nav_chat
+    }
+
+    /** 하단 채팅 탭의 읽지 않은 메시지 배지 */
+    private fun updateChatBadge() {
+        runCatching {
+            val unread = if (PinSession.hasRoom() && currentTab != R.id.nav_chat) PinSession.chatUnread else 0
+            val badge = bottomNav.getOrCreateBadge(R.id.nav_chat)
+            badge.isVisible = unread > 0
+            badge.maxCharacterCount = 3
+            badge.backgroundColor = getColor(R.color.accent)
+            badge.badgeTextColor = getColor(R.color.on_accent)
+            if (unread > 0) badge.number = unread
+        }
     }
 
     private fun refreshCurrent() {
@@ -260,9 +290,11 @@ class MainActivity : AppCompatActivity() {
         runCatching {
             when (currentTab) {
                 R.id.nav_room -> roomScreen.refresh()
+                R.id.nav_chat -> chatScreen.refresh()
                 R.id.nav_settings -> settingsScreen.refresh()
                 else -> mapScreen.refresh()
             }
+            updateChatBadge()
         }
     }
 

@@ -13,6 +13,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
+import com.youngsu.pinlink.core.ChatMessage
 import com.youngsu.pinlink.core.Fix
 import com.youngsu.pinlink.core.MeetingPoint
 import com.youngsu.pinlink.core.Member
@@ -35,6 +36,10 @@ object PinSession {
     private const val UPLOAD_MS = 8_000L
     private const val POLL_MS = 8_000L
     private const val ROOM_POLL_EVERY = 3
+    /** 채팅 창을 보고 있을 때 메시지 확인 주기 (v1.0.6) */
+    private const val CHAT_POLL_MS = 3_000L
+    /** 채팅 창을 닫아 두었을 때 — 읽지 않은 메시지 배지만 갱신 (내용은 새 메시지가 있을 때만 받아 온다) */
+    private const val CHAT_IDLE_POLL_MS = 20_000L
 
     private lateinit var app: Context
     private val main = Handler(Looper.getMainLooper())
@@ -59,6 +64,22 @@ object PinSession {
 
     @Volatile var meeting: MeetingPoint? = null
         private set
+
+    /** 방 채팅 — 오래된 것부터 정렬된 목록 */
+    @Volatile var messages: List<ChatMessage> = emptyList()
+        private set
+
+    /** 읽지 않은 남의 메시지 수 (하단 탭·지도 버튼 배지) */
+    @Volatile var chatUnread: Int = 0
+        private set
+
+    /** 채팅 창이 화면에 떠 있는가 — 떠 있을 때는 3초마다 확인하고 바로 읽음으로 친다 */
+    @Volatile var chatOpen: Boolean = false
+        private set
+
+    @Volatile private var topChatId = ""
+    @Volatile private var lastReadMs = 0L
+    @Volatile private var lastChatPollAt = 0L
 
     /** 마지막 실패 — 화면·설정의 진단에 그대로 보여 준다 (성공하면 지워진다) */
     @Volatile var lastFault: SyncFault? = null
@@ -104,9 +125,12 @@ object PinSession {
     // ------------------------------------------------------------------ 초기화
 
     fun init(context: Context) {
-        if (started) return
+        // 화면(Activity)과 서비스가 같은 Application 을 넘긴다 — 진짜 앱에서는 한 번만 돈다.
+        // (화면 검사 도구는 시험마다 새 Application 을 만들기 때문에 여기서 다시 읽어야 한다)
+        val fresh = context.applicationContext
+        if (started && app === fresh) return
+        app = fresh
         started = true
-        app = context.applicationContext
         roomCode = prefs.roomCode
         roomOwner = prefs.roomOwner
         battery = readBattery()
@@ -336,6 +360,11 @@ object PinSession {
         reportedHidden = false
         lastUploadAt = 0L
         lastPollAt = 0L
+        messages = emptyList()
+        topChatId = ""
+        lastReadMs = 0L
+        chatUnread = 0
+        lastChatPollAt = 0L
         if (startSharing) {
             applyMode(ShareMode.ALWAYS)
         } else {
@@ -343,6 +372,7 @@ object PinSession {
         }
         refreshMembers()
         refreshRoom()
+        refreshChat(full = true)
     }
 
     fun leaveRoom(onDone: (() -> Unit)? = null) {
@@ -355,6 +385,11 @@ object PinSession {
         roomOwner = false
         members = emptyList()
         meeting = null
+        messages = emptyList()
+        chatUnread = 0
+        chatOpen = false
+        topChatId = ""
+        lastReadMs = 0L
         mySpeedKmh = 0.0
         myStaySince = 0L
         stayAnchor = null
@@ -522,6 +557,99 @@ object PinSession {
         }
     }
 
+    // --------------------------------------------------------------- 방 채팅 (v1.0.6)
+
+    /**
+     * 채팅을 새로 받아 온다.
+     * 새 메시지가 있을 때만 최근 [PinLogic.CHAT_PAGE] 건을 다시 받으므로,
+     * 보고 있지 않을 때의 주기 확인은 **읽기 1회**(pageSize=1)로 끝난다.
+     */
+    fun refreshChat(full: Boolean = false) {
+        val code = roomCode
+        if (code.isEmpty()) return
+        lastChatPollAt = System.currentTimeMillis()
+        if (full || messages.isEmpty() || topChatId.isEmpty()) {
+            engine.messages(code, PinLogic.CHAT_PAGE) { list, fault -> handleChat(list, fault) }
+            return
+        }
+        engine.messages(code, 1) { list, fault ->
+            if (fault != null) {
+                if (!demo) noteFault("chat-poll", fault)
+                return@messages
+            }
+            val newest = list?.firstOrNull()?.id
+            if (newest != null && newest != topChatId) {
+                engine.messages(code, PinLogic.CHAT_PAGE) { fullList, fullFault -> handleChat(fullList, fullFault) }
+            }
+        }
+    }
+
+    private fun handleChat(list: List<ChatMessage>?, fault: SyncFault?) {
+        if (list != null) applyChat(list)
+        else if (fault != null && !demo) noteFault("chat-poll", fault)
+    }
+
+    private fun applyChat(incoming: List<ChatMessage>) {
+        val mine = incoming.map { it.copy(mine = it.senderId == prefs.deviceId) }
+        val merged = PinLogic.mergeChat(messages, mine)
+        messages = merged
+        topChatId = merged.lastOrNull()?.id ?: topChatId
+        if (chatOpen) {
+            lastReadMs = maxOf(lastReadMs, merged.maxOfOrNull { it.createdAtMs } ?: 0L)
+            chatUnread = 0
+        } else {
+            chatUnread = PinLogic.unreadCount(merged, lastReadMs, prefs.deviceId)
+        }
+        notifyChanged()
+    }
+
+    /** 채팅 창을 열었다 — 지금까지 받은 메시지는 읽은 것으로 친다 */
+    fun openChat() {
+        chatOpen = true
+        lastReadMs = maxOf(lastReadMs, messages.maxOfOrNull { it.createdAtMs } ?: 0L)
+        chatUnread = 0
+        refreshChat(full = true)
+        notifyChanged()
+    }
+
+    fun closeChat() {
+        chatOpen = false
+        notifyChanged()
+    }
+
+    /** 메시지 보내기 — 화면에는 먼저 띄우고, 실패하면 거둔다 */
+    fun sendChat(raw: String, onDone: (SyncFault?) -> Unit) {
+        val code = roomCode
+        val text = PinLogic.cleanChatText(raw)
+        if (code.isEmpty() || text == null) {
+            onDone(null)
+            return
+        }
+        val now = System.currentTimeMillis()
+        val message = ChatMessage(
+            id = PinLogic.chatDocId(now, PinLogic.chatSuffix()),
+            senderId = prefs.deviceId,
+            senderName = myName,
+            senderColor = myColor,
+            text = text,
+            createdAtMs = now,
+            mine = true
+        )
+        messages = PinLogic.mergeChat(messages, listOf(message))
+        topChatId = messages.lastOrNull()?.id ?: message.id
+        lastReadMs = maxOf(lastReadMs, now)
+        chatUnread = 0
+        notifyChanged()
+        engine.sendMessage(code, message) { fault ->
+            if (fault != null) {
+                messages = messages.filterNot { it.id == message.id }
+                if (!demo) noteFault("chat-send", fault)
+                notifyChanged()
+            }
+            onDone(fault)
+        }
+    }
+
     /** 방 문서에서 약속 장소를 받는다 (다른 멤버가 찍었을 수 있다) */
     fun refreshRoom() {
         if (roomCode.isEmpty()) return
@@ -656,6 +784,9 @@ object PinSession {
                 if (pollCounter % ROOM_POLL_EVERY == 0) refreshRoom()
             }
         }
+        // 채팅은 위치 공유와 별개다 — 위치를 숨겨도 대화는 계속된다
+        val chatEvery = if (chatOpen) CHAT_POLL_MS else CHAT_IDLE_POLL_MS
+        if (now - lastChatPollAt >= chatEvery) refreshChat()
         notifyChanged()
     }
 }

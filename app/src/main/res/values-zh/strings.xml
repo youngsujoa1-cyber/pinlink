@@ -9,6 +9,7 @@
 
     <string name="tab_map">地图</string>
     <string name="tab_room">房间</string>
+    <string name="tab_chat">聊天</string>
     <string name="tab_settings">设置</string>
 
     <string name="lobby_badge">全球 · 实时位置</string>
@@ -177,4 +178,18 @@
     <string name="stay_hour">已停留 %1$d 小时 %2$d 分</string>
     <string name="stay_short_min">%1$d 分钟</string>
     <string name="stay_short_hour">%1$d 小时</string>
+
+    <!-- 房间聊天 (v1.0.6) -->
+    <string name="chat_title">房间聊天</string>
+    <string name="chat_members">%1$d 人</string>
+    <string name="chat_hint">输入消息</string>
+    <string name="chat_send">发送</string>
+    <string name="chat_empty">还没有消息，先打个招呼吧！</string>
+    <string name="chat_no_room">创建房间或用代码加入后，即可与房间成员聊天。</string>
+    <string name="chat_today">今天</string>
+    <string name="chat_yesterday">昨天</string>
+    <string name="chat_counter">%1$d/%2$d</string>
+    <string name="chat_failed">消息发送失败。</string>
+    <string name="chat_card_desc">与房间成员聊天</string>
+    <string name="chat_unread">新消息 %1$d</string>
 </resources>

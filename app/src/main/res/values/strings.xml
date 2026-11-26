@@ -12,6 +12,7 @@
     <!-- 탭 -->
     <string name="tab_map">Map</string>
     <string name="tab_room">Room</string>
+    <string name="tab_chat">Chat</string>
     <string name="tab_settings">Settings</string>
 
     <!-- 시작 화면 -->
@@ -189,4 +190,18 @@
     <string name="stay_hour">%1$d h %2$d min here</string>
     <string name="stay_short_min">%1$d min</string>
     <string name="stay_short_hour">%1$d h</string>
+
+    <!-- 방 채팅 (v1.0.6) -->
+    <string name="chat_title">Room chat</string>
+    <string name="chat_members">%1$d people</string>
+    <string name="chat_hint">Message the room</string>
+    <string name="chat_send">Send</string>
+    <string name="chat_empty">No messages yet — say hello!</string>
+    <string name="chat_no_room">Create a room or join one with a code to chat with its members.</string>
+    <string name="chat_today">Today</string>
+    <string name="chat_yesterday">Yesterday</string>
+    <string name="chat_counter">%1$d/%2$d</string>
+    <string name="chat_failed">Could not send the message.</string>
+    <string name="chat_card_desc">Chat with everyone in this room</string>
+    <string name="chat_unread">%1$d new</string>
 </resources>

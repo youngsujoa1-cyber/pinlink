@@ -3,6 +3,7 @@ package com.youngsu.pinlink.data
 import android.os.Handler
 import android.os.Looper
 import com.youngsu.pinlink.BuildConfig
+import com.youngsu.pinlink.core.ChatMessage
 import com.youngsu.pinlink.core.FirestoreCodec
 import com.youngsu.pinlink.core.Fix
 import com.youngsu.pinlink.core.MeetingPoint
@@ -109,6 +110,12 @@ interface SyncEngine {
 
     fun setMeeting(seed: RoomSeed, meeting: MeetingPoint?, onDone: (SyncFault?) -> Unit)
 
+    /** 방 채팅 — 보낸 메시지 한 건 올리기 */
+    fun sendMessage(code: String, message: ChatMessage, onDone: (SyncFault?) -> Unit)
+
+    /** 최근 메시지 — 문서 ID 순서(최신이 먼저)로 최대 [limit] 건. 실패하면 list 가 null */
+    fun messages(code: String, limit: Int, onDone: (List<ChatMessage>?, SyncFault?) -> Unit)
+
     fun leave(code: String, deviceId: String)
 }
 
@@ -129,6 +136,7 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
 
     private fun roomUrl(code: String) = "$base/rooms/$code"
     private fun membersUrl(code: String) = "$base/rooms/$code/members"
+    private fun messagesUrl(code: String) = "$base/rooms/$code/messages"
 
     override fun createRoom(code: String, ownerName: String, createdAt: Long, onDone: (SyncFault?) -> Unit) {
         val body = FirestoreCodec.documentJson(FirestoreCodec.roomFields(code, ownerName, createdAt, null))
@@ -228,6 +236,48 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
     override fun leave(code: String, deviceId: String) {
         pool.execute {
             runCatching { call("DELETE member", "${membersUrl(code)}/$deviceId?key=$apiKey", "DELETE", null) }
+        }
+    }
+
+    // -------------------------------------------------------------- 방 채팅 (v1.0.6)
+
+    /**
+     * 메시지 문서는 `rooms/{code}/messages/{id}` — 5필드(senderId·senderName·senderColor·text·createdAtMs).
+     * 규칙이 create 만 허용하므로 같은 ID 로 다시 보내면 403(고치기·지우기 금지).
+     */
+    override fun sendMessage(code: String, message: ChatMessage, onDone: (SyncFault?) -> Unit) {
+        val body = FirestoreCodec.documentJson(FirestoreCodec.chatFields(message))
+        send("PATCH chat", "${messagesUrl(code)}/${message.id}?key=$apiKey", "PATCH", body) { onDone(it) }
+    }
+
+    /**
+     * 최근 메시지 읽기.
+     * 문서 ID 가 '뒤집은 시각'으로 시작해서 **목록 순서 = 최신 순서**다(v1.0.6 실서버 확인).
+     * 정렬 옵션이 있는 runQuery 는 하위 컬렉션에서 403 이라 쓰지 않는다.
+     */
+    override fun messages(code: String, limit: Int, onDone: (List<ChatMessage>?, SyncFault?) -> Unit) {
+        read("GET chat", "${messagesUrl(code)}?key=$apiKey&pageSize=$limit") { reply ->
+            if (reply == null) {
+                onDone(null, SyncFault.offline("no response"))
+                return@read
+            }
+            if (!reply.ok) {
+                // 아직 대화가 없는 방은 하위 컬렉션이 404 — 오류가 아니라 '빈 대화'
+                if (reply.code == 404) onDone(emptyList(), null) else onDone(null, faultOf(reply))
+                return@read
+            }
+            val json = runCatching { JSONObject(reply.body) }.getOrNull()
+            val documents = json?.optJSONArray("documents")
+            val out = ArrayList<ChatMessage>()
+            if (documents != null) {
+                for (i in 0 until documents.length()) {
+                    val doc = documents.optJSONObject(i) ?: continue
+                    val id = doc.optString("name").substringAfterLast('/')
+                    val message = FirestoreCodec.chatFrom(docFields(doc), id) ?: continue
+                    out.add(message)
+                }
+            }
+            onDone(out, null)
         }
     }
 
@@ -420,8 +470,25 @@ class DemoEngine : SyncEngine {
         onDone(null)
     }
 
+    // 데모: 대화는 메모리에만 쌓인다(앱을 끄면 사라진다). 가상 친구가 대답하지는 않는다 —
+    // 진짜 대화가 아니라 화면을 확인하는 용도임을 분명히 하기 위해서다.
+    private val chats = HashMap<String, MutableList<ChatMessage>>()
+
+    override fun sendMessage(code: String, message: ChatMessage, onDone: (SyncFault?) -> Unit) {
+        if (message.valid) {
+            chats.getOrPut(code) { ArrayList() }.add(message.copy(mine = true))
+        }
+        onDone(null)
+    }
+
+    override fun messages(code: String, limit: Int, onDone: (List<ChatMessage>?, SyncFault?) -> Unit) {
+        val list = chats[code] ?: emptyList()
+        onDone(list.sortedByDescending { it.createdAtMs }.take(limit), null)
+    }
+
     override fun leave(code: String, deviceId: String) {
         rooms.remove(code)
+        chats.remove(code)
     }
 
     private data class DemoFriend(val id: String, val name: String, val color: String, val battery: Int)

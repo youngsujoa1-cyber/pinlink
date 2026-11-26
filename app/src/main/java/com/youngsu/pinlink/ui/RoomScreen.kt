@@ -41,6 +41,8 @@ class RoomScreen(private val host: MainActivity) {
     private val meetingBy: TextView
     private val clearMeeting: TextView
     private val leaveCard: LinearLayout
+    private lateinit var chatCard: LinearLayout
+    private lateinit var chatUnread: TextView
 
     private var signature = ""
 
@@ -125,6 +127,44 @@ class RoomScreen(private val host: MainActivity) {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = act.dp(14f) })
         column.addView(codeCard, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = act.dp(12f) })
+
+        // 방 채팅 카드 (v1.0.6) — 누르면 채팅 탭으로
+        chatCard = card()
+        val chatRow = Ui.row(act).apply {
+            setPadding(act.dp(4f), act.dp(4f), act.dp(4f), act.dp(4f))
+            addView(
+                Ui.icon(act, R.drawable.ic_chat, 20f, act.getColor(R.color.accent)),
+                LinearLayout.LayoutParams(act.dp(20f), act.dp(20f)).apply { rightMargin = act.dp(12f) }
+            )
+            val chatTexts = Ui.column(act)
+            chatTexts.addView(
+                Ui.text(act, act.getString(R.string.chat_title), 14f, act.getColor(R.color.text_primary), bold = true)
+            )
+            chatTexts.addView(
+                Ui.text(act, act.getString(R.string.chat_card_desc), 11f, act.getColor(R.color.text_tertiary)),
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = act.dp(2f) }
+            )
+            addView(chatTexts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT).apply { weight = 1f })
+            chatUnread = Ui.pill(act, "", act.getColor(R.color.accent), act.getColor(R.color.on_accent), 9.5f).apply {
+                visibility = View.GONE
+            }
+            addView(chatUnread, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { rightMargin = act.dp(6f) })
+            addView(
+                Ui.icon(act, R.drawable.ic_chevron_right, 16f, act.getColor(R.color.text_tertiary)),
+                LinearLayout.LayoutParams(act.dp(16f), act.dp(16f))
+            )
+            Ui.clickable(this) { host.openChatTab() }
+        }
+        chatCard.addView(chatRow, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
+        column.addView(chatCard, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = act.dp(12f) })
 
@@ -227,6 +267,7 @@ class RoomScreen(private val host: MainActivity) {
         val hasRoom = PinSession.hasRoom()
         emptyCard.visibility = if (hasRoom) View.GONE else View.VISIBLE
         codeCard.visibility = if (hasRoom) View.VISIBLE else View.GONE
+        chatCard.visibility = if (hasRoom) View.VISIBLE else View.GONE
         sharingCard.visibility = if (hasRoom) View.VISIBLE else View.GONE
         membersCard.visibility = if (hasRoom) View.VISIBLE else View.GONE
         meetingCard.visibility = if (hasRoom) View.VISIBLE else View.GONE
@@ -234,6 +275,10 @@ class RoomScreen(private val host: MainActivity) {
         if (!hasRoom) return
 
         codeText.text = PinSession.roomCode
+
+        val unread = PinSession.chatUnread
+        chatUnread.visibility = if (unread > 0) View.VISIBLE else View.GONE
+        if (unread > 0) chatUnread.text = act.getString(R.string.chat_unread, unread)
 
         val now = System.currentTimeMillis()
         val mode = PinSession.mode

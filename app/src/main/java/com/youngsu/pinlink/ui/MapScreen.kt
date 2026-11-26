@@ -52,6 +52,8 @@ class MapScreen(private val host: MainActivity) {
     private val codeChip: TextView
     private val chipsRow: LinearLayout = Ui.row(act)
     private val styleButton: FrameLayout
+    private val chatButton: FrameLayout
+    private val chatBadge: TextView
     private val backgroundHint: TextView
     private val memberCard: LinearLayout
     private val memberCardDot: View
@@ -129,6 +131,35 @@ class MapScreen(private val host: MainActivity) {
             setPadding(act.dp(11f), act.dp(5f), act.dp(11f), act.dp(5f))
             Ui.clickable(this) { host.copyRoomCode() }
         }
+
+        // 방 채팅 바로가기 (v1.0.6) — 읽지 않은 메시지 수를 배지로 얹는다
+        chatBadge = Ui.text(act, "", 8.5f, act.getColor(R.color.on_accent), bold = true).apply {
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = act.dpf(999f)
+                setColor(act.getColor(R.color.accent))
+            }
+            minWidth = act.dp(15f)
+            setPadding(act.dp(3f), 0, act.dp(3f), act.dp(1f))
+            visibility = View.GONE
+        }
+        chatButton = FrameLayout(act).apply {
+            background = Ui.glass(act)
+            addView(
+                Ui.icon(act, R.drawable.ic_chat, 17f, act.getColor(R.color.accent)),
+                FrameLayout.LayoutParams(act.dp(17f), act.dp(17f)).apply { gravity = Gravity.CENTER }
+            )
+            addView(chatBadge, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, act.dp(15f)
+            ).apply {
+                gravity = Gravity.TOP or Gravity.END
+                topMargin = act.dp(1f)
+                rightMargin = act.dp(1f)
+            })
+            contentDescription = act.getString(R.string.chat_title)
+            Ui.clickable(this) { host.openChatTab() }
+        }
         // 내 이동 속도 — 서 있는 동안은 '정지'로 조용하게, 달리는 동안은 골드 숫자로
         speedPill = Ui.glassPill(act, act.getString(R.string.speed_idle), act.getColor(R.color.text_tertiary), 10.5f).apply {
             setPadding(act.dp(10f), act.dp(5f), act.dp(10f), act.dp(5f))
@@ -150,6 +181,7 @@ class MapScreen(private val host: MainActivity) {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { leftMargin = act.dp(7f) })
             addView(View(act), LinearLayout.LayoutParams(0, 1).apply { weight = 1f })
+            addView(chatButton, LinearLayout.LayoutParams(act.dp(34f), act.dp(34f)).apply { leftMargin = act.dp(6f) })
             addView(sourceBadge, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { leftMargin = act.dp(8f) })
@@ -324,6 +356,10 @@ class MapScreen(private val host: MainActivity) {
             setStroke(act.dp(1f), act.getColor(if (sharing) R.color.glass_stroke else R.color.outline))
         }
         codeChip.text = PinSession.roomCode
+
+        val unread = PinSession.chatUnread
+        chatBadge.visibility = if (unread > 0) View.VISIBLE else View.GONE
+        if (unread > 0) chatBadge.text = if (unread > 99) "99+" else unread.toString()
 
         // 내 속도 — 서 있는 동안은 '몇 분째 머무는지'로 바뀐다
         val mySpeed = PinLogic.speedLabelValue(PinSession.mySpeedKmh)
