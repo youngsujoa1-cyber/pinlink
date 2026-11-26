@@ -193,7 +193,7 @@
 
     <!-- 방 채팅 (v1.0.6) -->
     <string name="chat_title">Room chat</string>
-    <string name="chat_members">%1$d people</string>
+    <string name="chat_members">%1$d in the room</string>
     <string name="chat_hint">Message the room</string>
     <string name="chat_send">Send</string>
     <string name="chat_empty">No messages yet — say hello!</string>

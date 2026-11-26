@@ -209,7 +209,7 @@ app/src/main/java/com/youngsu/pinlink/
 **검증**
 
 - JVM **246 PASS** · 실서버 **20/20** · Robolectric **14개** · `lintDebug`·`assembleDebug` 통과
-- APK `downloads/pinlink.apk` — `aapt2 dump badging` versionCode **7** / **1.0.6**, 11,320,299 B, debug 서명(`CN=Android Debug`), 5개 언어 `chat_title`(ko `방 채팅`, ja `ルームチャット`, zh `房间聊天`, es `Chat de la sala`), `ic_chat`·`ic_send` 포함
+- APK `downloads/pinlink.apk` — `aapt2 dump badging` versionCode **7** / **1.0.6**, 12,753,723 B (sha256 `eba6c05d…`), debug 서명(`CN=Android Debug`), 5개 언어 `chat_title`(ko `방 채팅`, ja `ルームチャット`, zh `房间聊天`, es `Chat de la sala`), `ic_chat`·`ic_send` 포함
 
 **남은 주의**
 

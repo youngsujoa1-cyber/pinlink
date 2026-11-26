@@ -181,7 +181,7 @@
 
     <!-- Chat de la sala (v1.0.6) -->
     <string name="chat_title">Chat de la sala</string>
-    <string name="chat_members">%1$d personas</string>
+    <string name="chat_members">%1$d en la sala</string>
     <string name="chat_hint">Escribe un mensaje</string>
     <string name="chat_send">Enviar</string>
     <string name="chat_empty">Aún no hay mensajes. ¡Saluda primero!</string>

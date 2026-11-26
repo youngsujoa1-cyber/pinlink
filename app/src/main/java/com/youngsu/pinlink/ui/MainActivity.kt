@@ -223,6 +223,8 @@ class MainActivity : AppCompatActivity() {
             hideSystemNavBar()
             PinSession.addListener(sessionListener)
             PinSession.setUiVisible(true)
+            // 채팅 탭을 보고 있었다면 다시 '열림'으로 (배경에 있는 동안은 읽지 않음으로 센다)
+            if (currentTab == R.id.nav_chat) PinSession.openChat()
             refreshSoon()
             // 서버에 없던 방을 되살렸으면 한 번 알려 준다
             if (PinSession.consumeRoomRepaired()) toast(getString(R.string.toast_room_restored))
@@ -237,6 +239,7 @@ class MainActivity : AppCompatActivity() {
         runCatching {
             PinSession.removeListener(sessionListener)
             PinSession.setUiVisible(false)
+            PinSession.closeChat()
             main.removeCallbacks(updater)
         }
     }
