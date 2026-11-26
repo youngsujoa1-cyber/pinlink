@@ -30,6 +30,7 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 ./gradlew --offline lintDebug assembleDebug     # APK: app/build/outputs/apk/debug/app-debug.apk
 bash tools/logic-check/run.sh                   # 순수 로직 검사(방 코드·만료·거리·Firestore 직렬화)
+python3 tools/map-js-check/check.py             # 지도 페이지 JS 검사(pip install dukpy 필요)
 ```
 
 `local.properties`(저장소에 올리지 않음):
@@ -142,7 +143,7 @@ app/src/main/java/com/youngsu/pinlink/
 - v1.0.4 국내/해외 판별 검사 30개 추가(`tools/logic-check/run.sh`): 대한민국 경계값(위도 33.0/38.9, 경도 124.5/132.0), 파리·도쿄·뉴욕·시드니, 여유폭(±0.6°), 전환 규칙(키 없음·실패·중심 없음 → CARTO)
 - 네이버 지도 인증 검증(2026-11-26, 실제 키): `curl -sI` → HTTP 200 · JS 326KB 정상 수신. 런타임 인증 엔드포인트 `https://oapi.map.naver.com/v3/auth?ncpKeyId=…&url=https://youngsujoa1-cyber.github.io/pinlink/` → `{"result":{"apiQuota":"200000","apiKeyInfo":"apiKey:map/webApiGroup"}}`, 같은 키로 등록되지 않은 주소(`evil.example.com`)·가짜 키는 HTTP 401 `Authentication Failed` — 등록한 도메인에서만 통과하는 것을 확인
 - 네이버 지도 JS 실제 동작(같은 키, 등록 도메인 페이지에서 SDK 로드): 지도 생성·중심/줌 조회 정상, `nrbe.pstatic.net/styles/basic/…png` 타일 요청 발생(`performance` 리소스로 확인) → 인증 통과 후 타일까지 내려오는 것 확인
-- 지도 페이지 JS를 Duktape 로 스텁 렌더링해 26개 동작 검사: 멤버 마커 생성·재사용·삭제, 이름표/첫 글자/색/투명도/선택 링, 내 위치 점, 약속 깃발, 이동(`moveTo`), 다크 클래스 on/off, 고정 핀 on/off, 따라가기 on/off, 중심 콜백
+- 지도 페이지 JS를 Duktape 로 스텁 렌더링해 26개 동작 검사 (`python3 tools/map-js-check/check.py`, `pip install dukpy`): 멤버 마커 생성·재사용·삭제, 이름표/첫 글자/색/투명도/선택 링, 내 위치 점, 약속 깃발, 이동(`moveTo`), 다크 클래스 on/off, 고정 핀 on/off, 따라가기 on/off, 중심 콜백
 - `tools/ui-smoke/run.sh` 에 지도 제공자 배지 검사 추가 — 네이버 지도가 준비되지 않는 환경에서 9초 뒤 CARTO 로 넘어가고 앱은 살아 있는지(13개 테스트 전부 통과)
 - **못 한 것**: 이 환경에는 기기·에뮬레이터가 없어 실제 화면 렌더링, GPS 측정, 백그라운드 서비스 유지, 광고 노출, **두 기기 사이의 실제 위치 동기화**, **네이버 지도 위에서의 핀·핀치 체감**은 설치 후 확인이 필요합니다(서버·인증·타일 요청은 위처럼 검증).
 
