@@ -488,10 +488,9 @@ object PinSession {
             onDone(SyncFault(SyncFailure.DENIED, 403, "not host"))
             return
         }
-        if (busy) return
-        busy = true
+        // 방 만들기·참여와 달리 busy 로 막지 않는다 — 내보내기는 그 흐름과 무관하고,
+        // 막으면 화면이 결과를 기다린 채 끝나지 않는다.
         engine.kick(code, target.id) { fault ->
-            busy = false
             if (fault == null) {
                 members = members.filterNot { it.id == target.id }
                 kickedIds = PinLogic.withKicked(kickedIds, target.id)
