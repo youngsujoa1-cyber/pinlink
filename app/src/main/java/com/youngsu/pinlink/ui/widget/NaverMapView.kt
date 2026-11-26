@@ -56,6 +56,11 @@ class NaverMapView(context: Context) : FrameLayout(context) {
 
     private var ready = false
     private var dead = false
+    private var failureReason: String? = null
+
+    /** 만들자마자 실패했는가(에셋 누락 등) — 부르는 쪽이 콜백을 붙인 뒤에 확인한다 */
+    val failed: Boolean get() = failureReason != null
+    val failedReason: String? get() = failureReason
 
     var onReady: (() -> Unit)? = null
     var onFailure: ((String) -> Unit)? = null
@@ -128,6 +133,7 @@ class NaverMapView(context: Context) : FrameLayout(context) {
     private fun fail(reason: String) {
         if (dead) return
         dead = true
+        failureReason = reason
         ready = false
         queue.clear()
         main.removeCallbacks(watchdog)

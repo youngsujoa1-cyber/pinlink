@@ -249,6 +249,11 @@ class HybridMapView(context: Context) : FrameLayout(context) {
         view.visibility = View.GONE
         addView(view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         naver = view
+        if (view.failed) {
+            // 에셋 누락처럼 만드는 순간 실패한 경우 — 콜백을 붙이기 전이라 직접 처리한다
+            handleNaverFailure(view.failedReason ?: "failed")
+            return null
+        }
         return view
     }
 
