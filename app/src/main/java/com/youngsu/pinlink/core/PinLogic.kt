@@ -411,6 +411,103 @@ object PinLogic {
     /** 이 기기가 방장에 의해 내보내졌는가 */
     fun kickedOut(kicked: List<String>, deviceId: String): Boolean =
         deviceId.isNotBlank() && kicked.any { it == deviceId }
+
+    // ------------------------------------------------------------ 주기 (v1.0.8)
+
+    /**
+     * 폴링 주기 묶음 (v1.0.8).
+     *
+     * v1.0.7 까지는 틱이 5초 고정이라 채팅(3초)·멤버(8초)·방 문서(24초)가 모두 5초의 배수로만 돌았고,
+     * 약속 장소는 최대 30초에 한 번만 갱신됐다(사용자 제보: "글을 쓰거나 위치 지정 같은 거 하면 딜레이가 너무 돼").
+     * 이제 화면이 켜져 있으면 1초 틱으로 각 주기를 따로 지키고, 화면이 꺼져 있으면 배터리를 아낀다.
+     */
+    data class PollTiming(
+        /** 타이머가 도는 간격 — 각 폴링은 자기 주기를 넘겼을 때만 나간다 */
+        val tickMs: Long,
+        /** 채팅 확인 주기 (대화를 보고 있을 때 / 안 보고 있을 때) */
+        val chatMs: Long,
+        /** 멤버 위치 받기 주기 */
+        val memberMs: Long,
+        /** 방 문서(약속 장소·방장 내보내기) 확인 주기 */
+        val roomMs: Long,
+        /** 위치를 숨겨 둔 동안 방 문서를 확인하는 주기 */
+        val roomIdleMs: Long,
+        /** 내 위치 올리기 주기 */
+        val uploadMs: Long
+    )
+
+    /** 화면이 켜져 있을 때의 틱 — 1초마다 깨어나 각 주기를 지킨다 */
+    const val TICK_ACTIVE_MS = 1_000L
+
+    /** 화면이 꺼져 있을 때의 틱 — v1.0.7 과 같은 5초 */
+    const val TICK_IDLE_MS = 5_000L
+
+    /** 채팅을 보고 있을 때 메시지 확인 주기 (1.5초) */
+    const val CHAT_POLL_ACTIVE_MS = 1_500L
+
+    /** 화면은 켜져 있지만 채팅은 접어 둔 상태 — 읽지 않음 배지만 갱신 (5초) */
+    const val CHAT_POLL_FOREGROUND_MS = 5_000L
+
+    /** 화면이 꺼져 있을 때 채팅 확인 주기 (20초, v1.0.6 과 같음) */
+    const val CHAT_POLL_IDLE_MS = 20_000L
+
+    /** 화면이 켜져 있을 때 멤버 위치·방 문서 확인·내 위치 올리기 주기 (3초, v1.0.7 은 10초/30초) */
+    const val POLL_ACTIVE_MS = 3_000L
+
+    /** 화면이 꺼져 있을 때 멤버 위치·내 위치 올리기 주기 (8초, v1.0.7 과 같음) */
+    const val POLL_IDLE_MS = 8_000L
+
+    /** 화면이 꺼져 있을 때 방 문서 확인 주기 (24초 = 8초 × 3, v1.0.7 과 같음) */
+    const val ROOM_POLL_IDLE_MS = 24_000L
+
+    /** 화면이 꺼져 있고 위치를 숨겨 둔 동안에도 방장이 나를 내보냈는지 확인하는 주기 (20초, v1.0.7 과 같음) */
+    const val ROOM_IDLE_CHECK_MS = 20_000L
+
+    private val TIMING_ACTIVE = PollTiming(
+        tickMs = TICK_ACTIVE_MS,
+        chatMs = CHAT_POLL_ACTIVE_MS,
+        memberMs = POLL_ACTIVE_MS,
+        roomMs = POLL_ACTIVE_MS,
+        // 위치를 숨겨 둔 채로 지도를 보고 있어도 약속 장소는 바로 보여야 한다
+        roomIdleMs = POLL_ACTIVE_MS,
+        uploadMs = POLL_ACTIVE_MS
+    )
+
+    /** 화면은 켜져 있지만 채팅은 접어 둔 상태 */
+    private val TIMING_ACTIVE_NO_CHAT = TIMING_ACTIVE.copy(chatMs = CHAT_POLL_FOREGROUND_MS)
+
+    private val TIMING_IDLE = PollTiming(
+        tickMs = TICK_IDLE_MS,
+        chatMs = CHAT_POLL_IDLE_MS,
+        memberMs = POLL_IDLE_MS,
+        roomMs = ROOM_POLL_IDLE_MS,
+        roomIdleMs = ROOM_IDLE_CHECK_MS,
+        uploadMs = POLL_IDLE_MS
+    )
+
+    /** 지금 상태의 폴링 주기 — 화면이 켜져 있을 때만 빠르게, 꺼져 있으면 배터리를 아낀다 */
+    fun timing(uiVisible: Boolean, chatVisible: Boolean): PollTiming = when {
+        !uiVisible -> TIMING_IDLE
+        chatVisible -> TIMING_ACTIVE
+        else -> TIMING_ACTIVE_NO_CHAT
+    }
+
+    /**
+     * 마지막으로 한 시각([lastAt])에서 [everyMs] 가 지났는가.
+     * 0(아직 한 적 없음)이거나 기기 시계가 뒤로 갔으면 바로 돈다 — 화면으로 돌아왔을 때 한 번은 반드시 확인한다.
+     */
+    fun isDue(lastAt: Long, now: Long, everyMs: Long): Boolean =
+        lastAt <= 0L || now < lastAt || now - lastAt >= everyMs
+
+    /**
+     * 방 문서를 새로 받았을 때 지도에 보여 줄 약속 장소 (v1.0.8).
+     *
+     * 내가 약속 장소를 찍어 저장하는 동안(`saving`)에는 서버 문서가 아직 옛 값을 줄 수 있다.
+     * 그때 옛 값으로 되돌리면 깃발이 한 번 깜빡이므로, 저장이 끝날 때까지 내가 고른 값(`pending`,
+     * 지우기면 null)을 그대로 보여 준다.
+     */
+    fun meetingAfterRefresh(saving: Boolean, pending: MeetingPoint?, incoming: MeetingPoint?): MeetingPoint? =
+        if (saving) pending else incoming
 }
 
 /**

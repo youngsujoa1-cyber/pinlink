@@ -62,6 +62,7 @@ fun main() {
     stayChecks()
     chatChecks()
     hostChecks()
+    timingChecks()
     codecChecks()
     regionChecks()
 
@@ -589,4 +590,55 @@ fun hostChecks() {
     expect("strList empty", FirestoreCodec.strList(mapOf("kickedIds" to mapOf("arrayValue" to emptyList<String>())), "kickedIds"), emptyList<String>())
     expect("strList missing", FirestoreCodec.strList(emptyMap(), "kickedIds"), emptyList<String>())
     expect("strList wrong type", FirestoreCodec.strList(mapOf("kickedIds" to mapOf("stringValue" to "a")), "kickedIds"), emptyList<String>())
+}
+
+// ------------------------------------------------------- 폴링 주기 (v1.0.8)
+
+fun timingChecks() {
+    // 화면이 켜져 있을 때 — 1초 틱, 채팅 1.5초, 멤버·방 문서·내 위치 3초
+    val active = PinLogic.timing(uiVisible = true, chatVisible = true)
+    expect("active tick", active.tickMs, 1_000L)
+    expect("active chat poll", active.chatMs, 1_500L)
+    expect("active member poll", active.memberMs, 3_000L)
+    expect("active room poll (v1.0.7 은 30초)", active.roomMs, 3_000L)
+    expect("active upload", active.uploadMs, 3_000L)
+    expect("active room idle check", active.roomIdleMs, 3_000L)
+
+    // 화면은 켜져 있지만 채팅은 접어 둔 상태 — 배지만 5초마다
+    val foregroundNoChat = PinLogic.timing(uiVisible = true, chatVisible = false)
+    expect("foreground no chat tick", foregroundNoChat.tickMs, 1_000L)
+    expect("foreground no chat poll", foregroundNoChat.chatMs, 5_000L)
+    expect("foreground no chat keeps member poll", foregroundNoChat.memberMs, 3_000L)
+
+    // 화면이 꺼져 있을 때 — v1.0.7 과 같은 배터리 절약 값
+    val idle = PinLogic.timing(uiVisible = false, chatVisible = true)
+    expect("idle tick", idle.tickMs, 5_000L)
+    expect("idle chat poll (v1.0.6 과 같음)", idle.chatMs, 20_000L)
+    expect("idle member poll (v1.0.7 과 같음)", idle.memberMs, 8_000L)
+    expect("idle room poll (v1.0.7 과 같음)", idle.roomMs, 24_000L)
+    expect("idle upload", idle.uploadMs, 8_000L)
+    expect("idle room idle check", idle.roomIdleMs, 20_000L)
+
+    // 채팅을 보고 있을 때가 접어 둔 때보다 느리지 않다
+    expectTrue("chat visible is faster", active.chatMs <= foregroundNoChat.chatMs)
+    expectTrue("idle is slower than active", idle.tickMs > active.tickMs && idle.memberMs > active.memberMs)
+
+    // 지금 돌 때인가 — 마지막에 한 적이 없으면(0) 바로, 주기를 넘겼으면 바로
+    expect("due never done", PinLogic.isDue(0L, 10_000L, 1_500L), true)
+    expect("due just now", PinLogic.isDue(10_000L, 10_000L, 1_500L), false)
+    expect("due before the interval", PinLogic.isDue(9_000L, 10_000L, 1_500L), false)
+    expect("due exactly on the interval", PinLogic.isDue(8_500L, 10_000L, 1_500L), true)
+    expect("due after the interval", PinLogic.isDue(5_000L, 10_000L, 1_500L), true)
+    expect("due with clock moved back", PinLogic.isDue(20_000L, 10_000L, 1_500L), true)
+
+    // 약속 장소 — 저장 중에는 서버의 옛 값으로 되돌리지 않는다
+    val old = MeetingPoint(37.39, 127.10, "정자역", "영수", 1_700_000_000_000L)
+    val picked = MeetingPoint(37.40, 127.11, "서현역", "영수", 1_700_000_100_000L)
+    expect("meeting not saving keeps server", PinLogic.meetingAfterRefresh(false, null, old), old)
+    expect("meeting not saving keeps null", PinLogic.meetingAfterRefresh(false, null, null), null)
+    expect("meeting saving wins over old server value", PinLogic.meetingAfterRefresh(true, picked, old), picked)
+    expect("meeting saving keeps when server has none", PinLogic.meetingAfterRefresh(true, picked, null), picked)
+    expect("meeting saving wins when server already caught up", PinLogic.meetingAfterRefresh(true, picked, picked), picked)
+    // 지우는 중에는 옛 깃발이 다시 살아나지 않아야 한다
+    expect("meeting clearing ignores old server value", PinLogic.meetingAfterRefresh(true, null, old), null)
 }

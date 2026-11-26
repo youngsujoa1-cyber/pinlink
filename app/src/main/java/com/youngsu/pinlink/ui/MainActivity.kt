@@ -331,10 +331,12 @@ class MainActivity : AppCompatActivity() {
         if (key != lastStructureKey) lastStructureKey = key
         if (refreshScheduled) return
         refreshScheduled = true
+        // 한 프레임(16ms)만 미뤄 여러 번 바뀐 상태를 한 번에 그린다 —
+        // v1.0.7 의 60ms 는 메시지 전송·약속 지정 직후 체감 지연으로 남을 수 있었다 (v1.0.8)
         main.postDelayed({
             refreshScheduled = false
             refreshCurrent()
-        }, 60L)
+        }, 16L)
     }
 
     // ------------------------------------------------------------- 방 만들기·참여

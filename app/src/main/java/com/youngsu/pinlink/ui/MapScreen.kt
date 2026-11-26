@@ -538,13 +538,22 @@ class MapScreen(private val host: MainActivity) {
     private fun pickMeetingAt(lat: Double, lng: Double) {
         if (!PinSession.hasRoom() || pickMode) return
         Dialogs.showMeetingName(act) { name ->
-            val point = MeetingPoint(lat, lng, name, PinSession.myName, System.currentTimeMillis())
-            PinSession.setMeeting(point) { fault ->
-                if (fault == null) host.toast(act.getString(R.string.toast_meeting_set))
-                else host.toastFault(act.getString(R.string.err_meeting_save), fault)
-                refresh()
-            }
+            saveMeeting(MeetingPoint(lat, lng, name, PinSession.myName, System.currentTimeMillis()))
         }
+    }
+
+    /**
+     * 약속 장소 저장 — 이름을 정한 즉시 지도에 깃발을 그리고(0ms), 서버 결과는 뒤에서 받는다 (v1.0.8).
+     * 실패했을 때만 PinSession 이 이전 값으로 되돌리고 여기서 토스트로 알린다.
+     */
+    private fun saveMeeting(point: MeetingPoint) {
+        PinSession.setMeeting(point) { fault ->
+            if (fault == null) host.toast(act.getString(R.string.toast_meeting_set))
+            else host.toastFault(act.getString(R.string.err_meeting_save), fault)
+            refresh()
+        }
+        // 서버 응답(왕복 2회)을 기다리지 않고 지금 바로 그린다
+        refresh()
     }
 
     // ---------------------------------------------------------- 약속 장소 고르기
@@ -583,14 +592,10 @@ class MapScreen(private val host: MainActivity) {
     private fun confirmPick() {
         val lat = map.centerLat
         val lng = map.centerLng
+        // 픽 모드는 서버 응답과 무관하게 바로 닫는다 — 지도가 막히지 않게
         cancelPick()
         Dialogs.showMeetingName(act) { name ->
-            val point = MeetingPoint(lat, lng, name, PinSession.myName, System.currentTimeMillis())
-            PinSession.setMeeting(point) { fault ->
-                if (fault == null) host.toast(act.getString(R.string.toast_meeting_set))
-                else host.toastFault(act.getString(R.string.err_meeting_save), fault)
-                refresh()
-            }
+            saveMeeting(MeetingPoint(lat, lng, name, PinSession.myName, System.currentTimeMillis()))
         }
     }
 

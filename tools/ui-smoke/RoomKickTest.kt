@@ -92,8 +92,14 @@ class RoomKickTest {
         val activity = openRoom(app, "KICK01")
         val me = AppPrefs.get(app).deviceId
 
-        PinSession.previewRoomForTest(hostId = me, others = listOf(member("dev-b", "Ddd"), member("dev-c", "구형폰")))
+        val others = listOf(member("dev-b", "Ddd"), member("dev-c", "구형폰"))
+        // 이 검사 환경은 서버에 방을 만들 수 없어(자바 HttpURLConnection 이 PATCH 를 막는다)
+        // 앱을 열 때 보낸 멤버 조회가 늦게 404(빈 목록)로 돌아와 채워 둔 목록을 덮어쓸 수 있다.
+        // 한 번 흘려보낸 뒤에 채워 넣고 바로 확인한다.
+        PinSession.previewRoomForTest(hostId = me, others = others)
         ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS)
+        PinSession.previewRoomForTest(hostId = me, others = others)
+        ShadowLooper.idleMainLooper(32, TimeUnit.MILLISECONDS)
         layout(activity)
 
         val shown = texts(activity.window.decorView)

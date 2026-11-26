@@ -147,7 +147,20 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
 
     private val base = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents"
     private val main = Handler(Looper.getMainLooper())
-    private val pool = Executors.newFixedThreadPool(3)
+
+    /**
+     * 통신 스레드 (v1.0.8: 3 → 6).
+     * 화면이 켜져 있을 때 멤버(3초)·방 문서(3초)·내 위치(3초)·채팅(1.5초)이 함께 돌기 때문에,
+     * 3개로는 느린 요청 하나가 뒤의 요청을 줄 세워 체감 지연이 커진다.
+     */
+    private val pool = Executors.newFixedThreadPool(6)
+
+    /**
+     * 이번 실행에서 서버에 있다고 확인한 방 (v1.0.8).
+     * 약속 장소를 찍을 때마다 방 문서를 먼저 읽던 왕복 1회를 줄인다.
+     * (방 문서 폴링이 3초마다 돌므로 사라진 방은 곧 알아채고, 그때는 다시 확인한다)
+     */
+    private val verifiedRooms: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     private fun roomUrl(code: String) = "$base/rooms/$code"
     private fun membersUrl(code: String) = "$base/rooms/$code/members"
@@ -201,8 +214,14 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
                 return@read
             }
             when {
-                reply.ok -> onDone(RoomLookup.Found(roomOf(code, reply.body)))
-                reply.code == 404 -> onDone(RoomLookup.Missing)
+                reply.ok -> {
+                    verifiedRooms.add(code)
+                    onDone(RoomLookup.Found(roomOf(code, reply.body)))
+                }
+                reply.code == 404 -> {
+                    verifiedRooms.remove(code)
+                    onDone(RoomLookup.Missing)
+                }
                 else -> onDone(RoomLookup.Failed(faultOf(reply) ?: SyncFault(SyncFailure.UNKNOWN, reply.code)))
             }
         }
@@ -217,6 +236,11 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
      * 그래서 방을 쓰기 전에 늘 `code`·`owner`·`createdAt` 이 들어간 온전한 문서를 먼저 만든다.
      */
     override fun ensureRoom(seed: RoomSeed, onDone: (SyncFault?) -> Unit) {
+        // 방금(3초 안에) 방이 있는 것을 확인했으면 읽기 왕복을 건너뛴다 (v1.0.8)
+        if (verifiedRooms.contains(seed.code)) {
+            onDone(null)
+            return
+        }
         fetchRoom(seed.code) { lookup ->
             when (lookup) {
                 is RoomLookup.Found -> onDone(null)
@@ -276,10 +300,17 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
                 val fields = FirestoreCodec.roomFields(seed.code, "", 0L, meeting)
                     .filterKeys { it.startsWith("meeting") }
                 val body = FirestoreCodec.documentJson(fields)
-                send("PATCH 약속", "${roomUrl(seed.code)}?key=$apiKey&${FirestoreCodec.meetingMaskQuery()}", "PATCH", body) { onDone(it) }
+                send("PATCH 약속", "${roomUrl(seed.code)}?key=$apiKey&${FirestoreCodec.meetingMaskQuery()}", "PATCH", body) { fault ->
+                    // 방이 사라졌거나 규칙이 막았으면 다음번에는 방 문서를 다시 확인하게 둔다
+                    if (fault?.failure == SyncFailure.DENIED) verifiedRooms.remove(seed.code)
+                    onDone(fault)
+                }
             } else {
                 // updateMask 에만 있고 본문에 없는 필드는 삭제된다 — 약속 장소 지우기(나머지 필드는 그대로)
-                send("PATCH 약속 지움", "${roomUrl(seed.code)}?key=$apiKey&${FirestoreCodec.meetingMaskQuery()}", "PATCH", "{\"fields\":{}}") { onDone(it) }
+                send("PATCH 약속 지움", "${roomUrl(seed.code)}?key=$apiKey&${FirestoreCodec.meetingMaskQuery()}", "PATCH", "{\"fields\":{}}") { fault ->
+                    if (fault?.failure == SyncFailure.DENIED) verifiedRooms.remove(seed.code)
+                    onDone(fault)
+                }
             }
         }
     }
@@ -361,8 +392,8 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
         return try {
             conn = (URL(url).openConnection() as HttpURLConnection).apply {
                 requestMethod = method
-                connectTimeout = TIMEOUT_MS
-                readTimeout = TIMEOUT_MS
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = READ_TIMEOUT_MS
                 setRequestProperty("Accept", "application/json")
                 if (body != null) {
                     doOutput = true
@@ -465,7 +496,13 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
     }
 
     companion object {
-        private const val TIMEOUT_MS = 10_000
+        /**
+         * v1.0.8: 10초 → 연결 6초·응답 8초.
+         * 폴링이 3초마다 도는데 한 요청이 20초씩 스레드를 붙잡으면 그 뒤 요청이 모두 늦어진다.
+         * (Firestore 문서 하나를 읽고 쓰는 요청이라 8초면 충분하다)
+         */
+        private const val CONNECT_TIMEOUT_MS = 6_000
+        private const val READ_TIMEOUT_MS = 8_000
     }
 }
 

@@ -27,21 +27,15 @@ import java.util.concurrent.CopyOnWriteArrayList
  *
  * 화면(MainActivity)과 포그라운드 서비스(ShareService)가 같은 객체를 본다.
  *  - 서비스가 살아 있는 동안 또는 화면이 보이는 동안만 위치를 요청한다.
- *  - 공유 중이면 8초마다 내 위치를 올리고, 8초마다 방 멤버를 받아 온다.
+ *  - 화면이 켜져 있을 때는 1초 틱으로 채팅(1.5초)·멤버 위치(3초)·방 문서(3초)·내 위치(3초)를,
+ *    꺼져 있으면 배터리를 아껴 5초 틱으로 채팅(20초)·위치(8초)·방 문서(24초)를 확인한다(v1.0.8).
  *  - 고른 시간이 끝나면 스스로 멈춘다(알림·핀도 함께 사라진다).
  */
 object PinSession {
 
-    private const val TICK_MS = 5_000L
-    private const val UPLOAD_MS = 8_000L
-    private const val POLL_MS = 8_000L
-    private const val ROOM_POLL_EVERY = 3
-    /** 채팅 창을 보고 있을 때 메시지 확인 주기 (v1.0.6) */
-    private const val CHAT_POLL_MS = 3_000L
-    /** 채팅 창을 닫아 두었을 때 — 읽지 않은 메시지 배지만 갱신 (내용은 새 메시지가 있을 때만 받아 온다) */
-    private const val CHAT_IDLE_POLL_MS = 20_000L
-    /** 위치를 숨겨 둔 동안에도 방장이 나를 내보냈는지 확인하는 주기 (v1.0.7) */
-    private const val ROOM_IDLE_CHECK_MS = 20_000L
+    /** 지금 상태(화면 켜짐·채팅 보고 있음)에 맞는 폴링 주기 — v1.0.8 */
+    private val timing: PinLogic.PollTiming
+        get() = PinLogic.timing(uiVisible, chatOpen || inlineChatOpen)
 
     private lateinit var app: Context
     private val main = Handler(Looper.getMainLooper())
@@ -80,6 +74,18 @@ object PinSession {
 
     @Volatile var meeting: MeetingPoint? = null
         private set
+
+    /**
+     * 저장 중인 약속 장소 (v1.0.8).
+     * 찍자마자 화면에 보여 주고, 서버가 따라올 때까지 방 문서 폴링이 옛 값으로 되돌리지 않게 한다.
+     */
+    @Volatile private var meetingSaving = false
+
+    /** 저장 중인 값 — 지우기(null)도 구분해야 하므로 '저장 중'은 따로 표시한다 */
+    @Volatile private var meetingPending: MeetingPoint? = null
+
+    /** 약속 장소를 찍은 순서 — 늦게 도착한 옛 응답이 최신 값을 덮지 않게 */
+    private var meetingSeq = 0
 
     /** 방 채팅 — 오래된 것부터 정렬된 목록 */
     @Volatile var messages: List<ChatMessage> = emptyList()
@@ -131,7 +137,6 @@ object PinSession {
     @Volatile private var lastUploadAt = 0L
     @Volatile private var lastPollAt = 0L
     @Volatile private var lastRoomAt = 0L
-    @Volatile private var pollCounter = 0
     @Volatile private var reportedHidden = false
     @Volatile private var serviceRunning = false
     @Volatile private var uiVisible = false
@@ -420,6 +425,8 @@ object PinSession {
         hostClaimed = false
         members = emptyList()
         meeting = null
+        meetingSaving = false
+        meetingPending = null
         messages = emptyList()
         chatUnread = 0
         chatOpen = false
@@ -448,7 +455,8 @@ object PinSession {
     /** 방 문서에서 받은 방장·내보낸 목록을 반영하고, 내가 내보내졌으면 즉시 나간다 */
     private fun applyRoomInfo(room: RoomInfo) {
         if (room.code != roomCode) return
-        meeting = room.meeting
+        // 저장 중인 약속 장소가 있으면 서버가 따라올 때까지 내가 고른 값을 그대로 보여 준다
+        meeting = PinLogic.meetingAfterRefresh(meetingSaving, meetingPending, room.meeting)
         roomHostId = room.hostId
         kickedIds = room.kicked
         // 1) 내가 내보내졌다 — 위치 공유를 멈추고 방에서 나간다 (다음 폴링에서 또 나가지 않게 먼저 확인)
@@ -573,20 +581,35 @@ object PinSession {
     /**
      * 약속 장소 저장 — 실패하면 이유([SyncFault])를 그대로 돌려준다.
      * 서버에 방 문서가 없으면 먼저 되살린 뒤 저장한다(CloudEngine.setMeeting → ensureRoom).
+     *
+     * v1.0.8: [sendChat] 처럼 **내 화면에는 찍는 즉시(0ms)** 깃발을 띄우고, 서버 요청이 실패했을 때만
+     * 이전 값으로 되돌리고 토스트로 알린다. v1.0.7 까지는 서버 응답이 올 때까지(왕복 2회) 깃발이 안 떴다.
      */
     fun setMeeting(point: MeetingPoint?, onDone: (SyncFault?) -> Unit) {
+        val previous = meeting
+        val token = ++meetingSeq
+        meetingSaving = true
+        meetingPending = point
+        meeting = point
+        notifyChanged()
         if (roomCode.isEmpty()) {
-            meeting = point
+            meetingSaving = false
+            meetingPending = null
             onDone(null)
             return
         }
         engine.setMeeting(roomSeed(), point) { fault ->
-            if (fault == null) {
-                meeting = point
-                clearFault()
+            // 더 새로운 요청이 뒤에 있으면 그쪽 결과를 따른다(옛 응답으로 되돌리지 않는다)
+            if (token == meetingSeq) {
+                meetingSaving = false
+                meetingPending = null
+                if (fault == null) {
+                    clearFault()
+                } else {
+                    meeting = previous
+                    noteFault("meeting", fault)
+                }
                 notifyChanged()
-            } else {
-                noteFault("meeting", fault)
             }
             onDone(fault)
         }
@@ -628,7 +651,7 @@ object PinSession {
         }
         Sync.demoEngine?.anchor = fix
         if (previous == null || previous.at <= 0L) notifyChanged()
-        if (isSharingNow() && System.currentTimeMillis() - lastUploadAt >= UPLOAD_MS) {
+        if (isSharingNow() && PinLogic.isDue(lastUploadAt, System.currentTimeMillis(), timing.uploadMs)) {
             uploadMine(force = true)
         }
     }
@@ -738,7 +761,11 @@ object PinSession {
     fun setInlineChatOpen(open: Boolean) {
         if (inlineChatOpen == open) return
         inlineChatOpen = open
-        if (open) markChatSeen()
+        if (open) {
+            markChatSeen()
+            // 펼친 순간부터 1.5초 주기로 확인하고, 다음 틱에서 바로 한 번 받아 온다 (v1.0.8)
+            lastChatPollAt = 0L
+        }
         notifyChanged()
     }
 
@@ -789,6 +816,9 @@ object PinSession {
         engine.sendMessage(code, message) { fault ->
             if (fault != null) {
                 messages = messages.filterNot { it.id == message.id }
+                // 거두었으니 '마지막으로 본 메시지'도 다시 잡는다 —
+                // 서버에는 실제로 들어갔을 수도 있으므로 다음 폴링에서 다시 받아 온다
+                topChatId = messages.lastOrNull()?.id.orEmpty()
                 if (!demo) noteFault("chat-send", fault)
                 notifyChanged()
             }
@@ -854,8 +884,11 @@ object PinSession {
     }
 
     fun setUiVisible(visible: Boolean) {
+        val wasVisible = uiVisible
         uiVisible = visible
         applyLocation()
+        // 화면으로 돌아왔을 때 (또는 꺼질 때) — 틱 주기를 바꾸고 다음 틱을 5초 기다리지 않는다 (v1.0.8)
+        if (uiVisible != wasVisible) kickClock()
     }
 
     private fun applyLocation() {
@@ -940,35 +973,52 @@ object PinSession {
 
     // --------------------------------------------------------------------- 주기
 
+    /**
+     * 타이머 — 화면이 켜져 있으면 1초, 꺼져 있으면 5초마다 깨어나 각 폴링이 자기 주기를 넘겼는지 본다.
+     * (v1.0.8) v1.0.7 까지는 틱이 5초 고정이라 3초 채팅·8초 위치·24초 방 문서가 모두 5초의 배수로만 돌았다.
+     */
     private val ticker = object : Runnable {
         override fun run() {
             onTick()
-            main.postDelayed(this, TICK_MS)
+            main.postDelayed(this, timing.tickMs)
         }
+    }
+
+    /**
+     * 화면이 켜지거나 꺼질 때 타이머를 다시 맞춘다 (v1.0.8).
+     * 주기가 바뀐 것에 더해, 5초를 기다리지 않고 **바로 한 번** 돈다 —
+     * 앱으로 돌아오자마자 약속 장소·새 메시지가 보이게 하기 위해서다.
+     * (main 스레드 하나에서만 불리므로 removeCallbacks 와 post 사이에 타이머가 끼어들지 않는다)
+     */
+    private fun kickClock() {
+        lastUploadAt = 0L
+        lastPollAt = 0L
+        lastRoomAt = 0L
+        lastChatPollAt = 0L
+        main.removeCallbacks(ticker)
+        main.post(ticker)
     }
 
     private fun onTick() {
         if (roomCode.isEmpty()) return
         val now = System.currentTimeMillis()
+        val every = timing
         if (mode.isSharing && PinLogic.isExpired(prefs.expiresAt, now)) {
             expireSharing()
             return
         }
         if (isSharingNow()) {
-            if (now - lastUploadAt >= UPLOAD_MS) uploadMine()
-            if (now - lastPollAt >= POLL_MS) {
-                refreshMembers()
-                pollCounter++
-                if (pollCounter % ROOM_POLL_EVERY == 0) refreshRoom()
-            }
-        } else if (now - lastRoomAt >= ROOM_IDLE_CHECK_MS) {
+            if (PinLogic.isDue(lastUploadAt, now, every.uploadMs)) uploadMine()
+            if (PinLogic.isDue(lastPollAt, now, every.memberMs)) refreshMembers()
+            // 약속 장소·방장 내보내기 — 화면이 켜져 있을 때 3초마다 (v1.0.7 은 30초)
+            if (PinLogic.isDue(lastRoomAt, now, every.roomMs)) refreshRoom()
+        } else if (PinLogic.isDue(lastRoomAt, now, every.roomIdleMs)) {
             // 위치를 숨겨 둔 동안에도 방 문서를 가끔 확인한다 —
             // 방장이 내보냈는데 공유가 멈춰 있어서 영영 모르는 일이 없게
             refreshRoom()
         }
         // 채팅은 위치 공유와 별개다 — 위치를 숨겨도 대화는 계속된다
-        val chatEvery = if (chatOpen) CHAT_POLL_MS else CHAT_IDLE_POLL_MS
-        if (now - lastChatPollAt >= chatEvery) refreshChat()
+        if (PinLogic.isDue(lastChatPollAt, now, every.chatMs)) refreshChat()
         notifyChanged()
     }
 }

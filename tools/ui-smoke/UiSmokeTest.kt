@@ -214,13 +214,14 @@ class UiSmokeTest {
             findEditText(activity.window.decorView)?.hint == app.getString(R.string.chat_hint)
         )
 
-        // 메시지를 보내면 화면에 바로 말풍선이 생긴다
+        // 메시지를 보내면 서버 응답을 기다리지 않고 바로 목록에 들어간다 (낙관적 전송, v1.0.6)
+        // 이 검사 환경은 PATCH 요청을 보낼 수 없어(자바 HttpURLConnection 이 PATCH 를 막는다) 잠시 뒤
+        // 전송 실패로 거두는 것이 정상이다 — 그래서 '응답 전(0ms)' 상태만 본다.
+        // 말풍선으로 그려지는지는 chatBubblesShowBothSidesAndPreview 가 본다.
         PinSession.sendChat("테스트 메시지") { }
-        ShadowLooper.idleMainLooper(2, TimeUnit.SECONDS)
-        layout(activity)
         assertTrue(
-            "보낸 메시지가 말풍선으로 보여야 한다",
-            texts(activity.window.decorView).any { it == "테스트 메시지" }
+            "보낸 메시지는 서버 응답 전에 바로 목록에 들어와야 한다",
+            PinSession.messages.any { it.text == "테스트 메시지" }
         )
     }
 
