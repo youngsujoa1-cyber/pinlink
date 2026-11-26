@@ -140,7 +140,7 @@ app/src/main/java/com/youngsu/pinlink/
 - APK 확인(v1.0.3): `aapt2 dump badging` 으로 패키지 `com.youngsu.pinlink` / versionCode 4 / 1.0.3 / targetSdk 35 / `INTERNET` 권한 / 권한 9종, `foregroundServiceType=0x8(location)` 서비스, `assets/privacy.html`, 5개 언어 문자열, adaptive icon 포함
 - Firestore REST 요청 모양 검증: 앱이 보내는 그대로의 본문을 실제 Firestore 엔드포인트로 보내 **400(깨진 JSON)과 달리 403(규칙 거부)** 응답을 확인 — 즉 본문은 파싱되고 보안 규칙에서만 막힌다
 - **실서버 왕복(v1.0.3, `pinlink-live`)**: 방 만들기 → 방 조회 → 약속 찍기 → 약속 지우기 → 멤버 위치 업로드 → 멤버 목록 → 나가기 전부 HTTP 200. 규칙 거부도 확인(소문자 코드 403 · 범위 밖 좌표 403 · 방 문서 삭제 403 · code 없는 방 문서 403). 검증 스크립트 `tool-results/pinlink-live-test.sh`
-- v1.0.4 국내/해외 판별 검사 30개 추가(`tools/logic-check/run.sh`): 대한민국 경계값(위도 33.0/38.9, 경도 124.5/132.0), 파리·도쿄·뉴욕·시드니, 여유폭(±0.6°), 전환 규칙(키 없음·실패·중심 없음 → CARTO)
+- v1.0.4 국내/해외 판별 검사 36개 추가(`tools/logic-check/run.sh`): 대한민국 경계값(위도 33.0/38.9, 경도 124.5/132.0), 파리·도쿄·뉴욕·시드니, 여유폭(±0.6°), 전환 규칙(키 없음·실패·중심 없음 → CARTO)
 - 네이버 지도 인증 검증(2026-11-26, 실제 키): `curl -sI` → HTTP 200 · JS 326KB 정상 수신. 런타임 인증 엔드포인트 `https://oapi.map.naver.com/v3/auth?ncpKeyId=…&url=https://youngsujoa1-cyber.github.io/pinlink/` → `{"result":{"apiQuota":"200000","apiKeyInfo":"apiKey:map/webApiGroup"}}`, 같은 키로 등록되지 않은 주소(`evil.example.com`)·가짜 키는 HTTP 401 `Authentication Failed` — 등록한 도메인에서만 통과하는 것을 확인
 - 네이버 지도 JS 실제 동작(같은 키, 등록 도메인 페이지에서 SDK 로드): 지도 생성·중심/줌 조회 정상, `nrbe.pstatic.net/styles/basic/…png` 타일 요청 발생(`performance` 리소스로 확인) → 인증 통과 후 타일까지 내려오는 것 확인
 - 지도 페이지 JS를 Duktape 로 스텁 렌더링해 26개 동작 검사 (`python3 tools/map-js-check/check.py`, `pip install dukpy`): 멤버 마커 생성·재사용·삭제, 이름표/첫 글자/색/투명도/선택 링, 내 위치 점, 약속 깃발, 이동(`moveTo`), 다크 클래스 on/off, 고정 핀 on/off, 따라가기 on/off, 중심 콜백
@@ -163,7 +163,7 @@ app/src/main/java/com/youngsu/pinlink/
 **검증**
 
 - 네이버 지도 인증: `curl` HTTP 200 + 런타임 인증 엔드포인트 결과(위 "검증한 것" 참고), 등록되지 않은 도메인·가짜 키는 401
-- `./gradlew --offline lintDebug assembleDebug` · `tools/logic-check/run.sh`(국내/해외 30개 추가) · `tools/ui-smoke/run.sh`(13개) 전부 통과
+- `./gradlew --offline lintDebug assembleDebug` · `tools/logic-check/run.sh`(국내/해외 36개 추가) · `tools/ui-smoke/run.sh`(13개) 전부 통과
 - APK `downloads/pinlink.apk` (11.2MB) · `aapt2 dump badging` versionCode 5 / 1.0.4
 
 **남은 주의**
