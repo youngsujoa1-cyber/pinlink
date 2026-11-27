@@ -3,9 +3,10 @@
 친구·가족·동료가 **6자리 방 코드**로 같은 방에 들어와 서로의 위치를 한 지도에서 보는 안드로이드 앱입니다.
 플레이스토어 출시와 AdMob 광고 수익화를 전제로 만들었고, 첫 실행부터 5개 언어(한국어·영어·일본어·중국어·스페인어)를 지원합니다.
 
-- 패키지 `com.youngsu.pinlink` · versionCode `11` · versionName `1.0.10` · minSdk 26 / targetSdk 36
+- 패키지 `com.youngsu.pinlink` · versionCode `12` · versionName `1.0.11` · minSdk 26 / targetSdk 36
 - 지도(하이브리드): **국내는 네이버 지도(JavaScript API v3, WebView)**, **해외는 CARTO 512×512(@2x) 베이스맵**(Canvas 직접 그리기)으로 자동 전환합니다. 대한민국 범위(위도 33.0~38.9, 경도 124.5~132.0)면 네이버, 그 밖이거나 네이버 지도가 뜨지 않으면 CARTO — 지금 떠 있는 지도는 화면 우측 상단 배지(`NAVER` / `CARTO`)에 표시합니다. 어두운/밝은 지도는 두 지도 모두에서 1탭 전환되고 고른 스타일은 앱에 저장됩니다. 네이버 키(`NAVER_MAP_CLIENT_ID`)가 없으면 전 세계를 CARTO 로만 그립니다.
 - 동기화: Firestore REST(`HttpURLConnection`) — 외부 SDK 없음. **v1.0.3 부터 PinLink 전용 무료 Firebase 프로젝트(`pinlink-live`, 서울 리전)에 실제로 연결**되어 있고, 키가 비어 있는 빌드에서는 데모 모드(친구 2명 시뮬레이션)로 내려갑니다.
+- 위치(v1.0.11): **Google Play Services 정밀 융합 위치**(`play-services-location` 21.0.1 · `FusedLocationProviderClient`, `PRIORITY_HIGH_ACCURACY` 2.5초·최소 이동 0m)를 1순위로 쓰고, Play Services 가 없는 기기에서는 기존 `LocationManager`(시스템 융합 · GPS · 기지국)로 돌아갑니다. 최근 2분 안에 정밀 위치(≤50m)가 있었으면 기지국 대략 위치(>150m)는 버립니다.
 
 ## 기능
 
@@ -28,6 +29,7 @@
 | **반응 속도 (v1.0.8)** | 화면이 켜져 있을 때는 **1초 틱**으로 돌며 채팅 **1.5초**·멤버 위치 **3초**·방 문서(약속 장소·방장 내보내기) **3초**·내 위치 **3초**마다 확인합니다(v1.0.7 은 틱이 5초 고정이라 실제로는 채팅 5초·위치 10초·약속 장소 **최대 30초**였습니다). **약속 장소는 찍는 즉시 내 화면에 깃발이 뜨고**(서버 응답을 기다리지 않음, 실패하면 되돌리고 안내), 앱으로 돌아오면 5초를 기다리지 않고 바로 한 번 확인합니다. 화면이 꺼져 있으면 기존 5초 틱·위치 8초·방 24초로 배터리를 아낍니다 |
 | 오류 수정 (v1.0.7) | ① **네이버 지도에 다른 멤버 핀이 하나도 안 보이던 문제**: `NaverMapView` 가 배열 리터럴(`PinLink.setMembers([{…}])`)을 넘기는데 지도 페이지는 `JSON.parse` 를 먼저 불러 배열이 `"[object Object]"` 가 되며 `SyntaxError` → 멤버 목록이 빈 배열로 덮였습니다. 배열이면 그대로 받도록 고치고 지도 JS 검사에 **배열 인자 회귀 검사**를 추가했습니다. ② **3버튼 내비게이션 바 폰에서 하단 탭이 빈칸으로 사라지던 문제**: `BottomNavigationView` 가 시스템 하단 인셋(약 48dp)을 자기 `paddingBottom` 으로 한 번 더 먹어 64dp 중 대부분이 패딩이 됐습니다. 탭 바는 인셋을 먹지 않게 막고 배너에서만 먹입니다 |
 | **핀 선명화 · 위치 자동 추적 (v1.0.10)** | ① 밝은 지도 위에서 상대방 핀(`홍`)이 연분홍 반투명으로 거의 사라지던 문제 — 아바타 파스텔 색을 **채도를 올린 선명한 색**(`core/PinColors`: 연분홍 `#F2A9B4` → 핫핑크 `#FF2E63`, 라벤더 → `#7C3AED`, 제이드 → `#059669` …)으로 바꾸고 **흰 3px 테두리 + 진한 그림자 + 글자 그림자**로 밝은/어두운 지도 어디서나 또렷하게. 오래된 핀은 투명도 대신 **채도를 낮춰**(`stale`) 표시합니다. ② **핀이 안 움직이던 문제** — 위치 요청을 GPS 한 곳에만 걸어 두고 재시도가 없었습니다. 이제 **융합(fused)·GPS·네트워크를 각각** 걸고, 20초 넘게 측정이 없으면 **15초마다 한 번씩 강제로 다시 받습니다**(`getCurrentLocation`). 내 파란 점·남의 핀은 측정이 올 때마다 **바로** 지도로 갑니다. ③ 지도 우측 아래 `◉` 버튼과 설정 `지금 위치 다시 받기` 가 실제로 **새 측정 → 서버 업로드 → 남의 위치 새로 받기**를 합니다. ④ 설정 → 동기화 진단에 **마지막 GPS 수신 시각·제공자·정확도·등록된 제공자**를 표시 |
+| **정밀 융합 위치 · 기지국 튐 방지 (v1.0.11)** | ① 같은 자리에 있는 두 기기 중 한 대(`홍`)가 지도에서 **약 840m 옆**에 뜨던 문제 — Android 기본 `LocationManager` 만 써서 GPS 가 약해진 순간 통신사 기지국 삼각측량(오차 수백m~1km)이 그대로 좌표가 됐습니다. 카카오맵과 같은 **Google Play Services 융합 위치**(Wi-Fi + GPS + 기지국, `PRIORITY_HIGH_ACCURACY` 2.5초)를 1순위로 붙였습니다. ② 그래도 들어오는 기지국 값은 **최근 2분 안에 정밀 위치(≤50m)가 있었으면 무시**하고(±60m Wi-Fi 융합 값도 지킵니다), 2분 넘게 좋은 위치가 없었으면 받아들여 핀이 멈추지 않게 합니다. ③ 위치가 아직 하나도 없을 때만 대략 위치를 임시 첫 핀으로 쓰고 **정확도(`±840m`)를 설정 → 동기화 진단 로그에 남깁니다**. ④ 제공자별 '마지막 위치'를 고를 때도 **기지국 값이 더 새것이어도 정밀한 GPS 를 먼저** 씁니다 |
 | 정보 | 개인정보 처리방침(한국어/영어) 앱 내 WebView + `docs/privacy.html` |
 
 ## 빌드
@@ -184,6 +186,10 @@ app/src/main/java/com/youngsu/pinlink/
 
 ## 검증한 것 / 못 한 것
 
+- `./gradlew lintDebug` 통과 (v1.0.11: error 0 · warning 52 — 그중 42건은 "더 새 라이브러리/AGP 가 있다"는 GradleDependency·AndroidGradlePluginVersion 알림) · `assembleDebug` · `bundleRelease`
+- `bash tools/logic-check/run.sh` — v1.0.11 **422 PASS / 0 FAIL** (정확도 필터 28개: 기지국 150m 경계·첫 위치 예외·2분 창 경계·정확도 모름·늦은 측정·마지막 위치 선택)
+- `bash tools/server-check/run.sh` — v1.0.11 실서버 **33/33 통과**
+- `python3 tools/map-js-check/check.py` — v1.0.11 **42개 통과** · `bash tools/ui-smoke/run.sh` — v1.0.11 **33개 통과**
 - `./gradlew --offline lintDebug assembleDebug bundleRelease` 통과 (v1.0.10: lint error 0 · warning 52 — 그중 42건은 "더 새 라이브러리/AGP 가 있다"는 GradleDependency·AndroidGradlePluginVersion 알림, v1.0.9)
 - `bash tools/logic-check/run.sh` — v1.0.9 **349 PASS / 0 FAIL** (위치 업로드 조건 15개·429 쿨다운 14개·폴링 주기 35개: 5m/30초·15m/45초 경계값, 처음 올리기, 시계 역행, 30초/60초 쿨다운 경계, 안내 10분 간격)
 - `bash tools/server-check/run.sh` — v1.0.9 실서버 **33/33 통과**(19:41, 한도가 하루마다 초기화된 뒤). 같은 날 16:2x 에는 읽기(GET)가 `429 Quota exceeded` 로 막혀 **30/33** 이었습니다 — 이번 버전의 출발점(한도 소진)이고, 쓰기·규칙(403) 검사는 그때도 전부 통과했습니다
@@ -503,6 +509,43 @@ APK `downloads/pinlink.apk` — `aapt2 dump badging` versionCode **9** / **1.0.8
 - JVM **349 PASS** (위치 업로드 조건 15개·429 쿨다운 14개·폴링 주기 35개) · 지도 JS **33개** · Robolectric **28개** · `lintDebug`(error 0) · `assembleDebug` · `bundleRelease` 통과.
 - 실서버 검사 **33/33**(19:41 — 한도 초기화 뒤). 한도가 소진돼 있던 16:2x 에는 읽기 3건이 `429` 로 막혀 30/33 이었습니다(이번 버전의 출발점).
 - APK `downloads/pinlink.apk` — versionCode **10** / **1.0.9**, 11,285,789 B (sha256 `e78ce2ad…`), debug 서명. AAB `downloads/pinlink-release.aab` — 6,472,021 B (sha256 `21ccc524…`), Play 업로드 키(`topster-upload.jks`, CN=Topster, SHA-256 `48:CE:06:87…`) 서명 · 실제 AdMob ID 3개(앱 ID·배너·전면)만 포함하고 테스트 ID 0건.
+
+## v1.0.11 — 정밀 융합 위치 · 기지국 튐 방지 (2026-11-28)
+
+**현상**(2026-11-28 03:23, 실서버 `rooms/AFZZE7` 확인): 두 기기(`이영수`, `홍`)가 의정부 금오동 **같은 자리**에 있었는데
+카카오맵에서는 붙어 나오고 PinLink 서버에는 `이영수`(37.752287, 127.069945) · `홍`(37.750393, 127.060652) — **843.7m** 떨어져 올라왔습니다.
+
+### 1. 원인
+
+v1.0.10 은 `LocationManager` 의 융합(안드로이드 12+) · GPS · 기지국(`NETWORK_PROVIDER`)을 각각 걸었습니다.
+문제는 **안드로이드 기본 `fused` 는 API 31+ 에서만 있고, GPS 가 약해지면(실내·차 안·구형 폰) 기지국 삼각측량이 그대로 통과**한 것입니다.
+기지국 값은 오차가 수백m~1km 라서 카카오맵(Play Services 융합 = Wi-Fi + GPS + 기지국)과 800m 넘게 벌어졌습니다.
+
+### 2. 고친 것
+
+| 단계 | v1.0.10 | v1.0.11 |
+| --- | --- | --- |
+| 위치 경로 | 시스템 `LocationManager` 만 | **Play Services `FusedLocationProviderClient`**(`PRIORITY_HIGH_ACCURACY`, 2.5초 · 최소 이동 0m) 1순위 + 기기 위치는 보조. Play Services 가 없으면 기존 경로로 자동 폴백(`gms:<code>` 를 로그·진단에 남김) |
+| 단발 요청 | `LocationManager.getCurrentLocation`(제공자) | 융합이 걸려 있으면 **`FusedLocationProviderClient.getCurrentLocation(PRIORITY_HIGH_ACCURACY)`** — `◉`·화면 복귀·공유 시작·워치독이 모두 이 경로 |
+| 기지국 튐 | 정확도와 무관하게 더 새 값이면 채택 | **`PinLogic.fixVerdict`** — 기지국 대략 위치(>150m 또는 정확도 모름)는 **최근 2분 안에 정밀 위치(≤50m)가 있었으면 — 또는 지금 값이 기지국보다 나은 값(≤150m, Wi-Fi 융합의 ±60m 등)인데 2분 안이면 — 버림**. 2분 넘게 좋은 위치가 없었으면 받아들임(핀 고정 방지) |
+| 첫 위치 | 그대로 채택 | 위치가 없을 때만 대략 위치를 임시 핀으로 쓰고 **`±840m` 정확도를 `SyncLog`·설정 진단에 남김** |
+| 마지막 위치 | 제공자별 중 **가장 새것** | **정밀한 것 우선**, 그 안에서 가장 새것(`PinLogic.pickLastKnown`) |
+| 진단 | 마지막 측정 제공자·정확도 | + **`fused` 상태(`on`/`gms:2`/`fail:…`)·등록 제공자에 `fused(gms)`·버린 기지국 측정 횟수/정확도**(복사용 진단에 `coarse` 줄) |
+| 의존성 | `play-services-ads` 23.5.0 | + `com.google.android.gms:play-services-location` **21.0.1** (21.4.0 은 Kotlin 2.3 메타데이터라 Kotlin 2.0.21 프로젝트에서 컴파일 불가 — `incompatible version of Kotlin` 오류로 확인) |
+
+### 3. 검증 (v1.0.11, 2026-11-28 05:06)
+
+- `bash tools/logic-check/run.sh` — **422 PASS / 0 FAIL** (v1.0.10 394 + 정확도 필터 28개: 150m 경계·첫 위치 예외·2분 경계(119초/120초/121초)·정확도 모름·늦은 측정·마지막 위치 선택·`±840m` 표기)
+- `bash tools/ui-smoke/run.sh` — **33개 통과** (`MapFollowTest` 5개 — 새 검사 `coarseCellFixDoesNotDragPinAway`: GPS ±8m 뒤에 들어온 기지국 ±840m 를 **무시**하고 무시한 사실을 진단에 남김)
+- `python3 tools/map-js-check/check.py` — **42개 통과**
+- `bash tools/server-check/run.sh` — 실서버 **33/33 통과**
+- `./gradlew lintDebug` — **error 0** (warning 52, 모두 기존 항목 — 더 새 라이브러리 알림·API 레벨 안내) · `assembleDebug` · `bundleRelease` 통과
+- APK `downloads/pinlink.apk` — `aapt2 dump badging` versionCode **12** / **1.0.11**, 11,459,438 B (sha256 `e0af5d84…`), debug 서명(`CN=Android Debug`, `apksigner verify` 통과). AAB `downloads/pinlink-release.aab` — 6,532,459 B (sha256 `b4f59684…`), Play 업로드 키(`CN=Topster, O=Topster, C=KR`) 서명 · AdMob **실제 ID 3개만**(앱 ID·배너·전면) 포함, 테스트 ID 0건
+
+### 4. 남은 것
+
+- 실기기 두 대에서 같은 자리에 모았을 때 핀이 겹쳐 나오는지 확인(서버 `rooms/AFZZE7/members` 좌표 차이 150m 이내인지).
+- Play 콘솔 업로드는 사용자가 `pinlink-release.aab` 로 진행(내부 테스트 트랙).
 
 ## v1.0.10 — 상대방 핀 선명화 · 위치가 저절로 따라오게 (2026-11-27)
 

@@ -67,6 +67,7 @@ fun main() {
     uploadChecks()
     quotaChecks()
     fixChecks()
+    coarseFilterChecks()
     colorChecks()
     codecChecks()
     regionChecks()
@@ -756,6 +757,134 @@ fun fixChecks() {
     // 추적 주기: 화면이 켜져 있으면 1초, 꺼지면 10초 — 살아 있는지 확인은 5초마다
     expectTrue("watchdog is faster than stale limit", PinLogic.FIX_ALIVE_MS > 5_000L * 3)
     expectTrue("retry gap is shorter than stale limit", PinLogic.FIX_RETRY_MS < PinLogic.FIX_ALIVE_MS)
+}
+
+/**
+ * v1.0.11 — 기지국 대략 위치가 정밀 위치를 덮어 840m 튀던 문제 (`rooms/AFZZE7`, 2026-11-28).
+ * 정확도 필터(150m 초과 기지국 차단 · 첫 위치 예외)와 마지막 위치 선택을 본다.
+ */
+fun coarseFilterChecks() {
+    val now = 1_800_000_000_000L
+    fun verdict(
+        hasFix: Boolean,
+        previousAt: Long,
+        previousAccuracy: Double,
+        lastPreciseAt: Long,
+        newAt: Long,
+        newAccuracy: Double
+    ) = PinLogic.fixVerdict(hasFix, previousAt, previousAccuracy, lastPreciseAt, newAt, newAccuracy, now)
+
+    val accept = PinLogic.FixVerdict.ACCEPT
+    val firstCoarse = PinLogic.FixVerdict.ACCEPT_COARSE_FIRST
+    val dropCoarse = PinLogic.FixVerdict.DROP_COARSE
+    val dropStale = PinLogic.FixVerdict.DROP_STALE
+
+    // 정확도 경계 — 정밀(≤50m) · 대략(>150m 또는 모름)
+    expect("8m is precise", PinLogic.isPreciseFix(8.0), true)
+    expect("50m is still precise", PinLogic.isPreciseFix(50.0), true)
+    expect("51m is not precise", PinLogic.isPreciseFix(51.0), false)
+    expect("150m is not coarse", PinLogic.isCoarseFix(150.0), false)
+    expect("151m is coarse", PinLogic.isCoarseFix(151.0), true)
+    expect("unknown accuracy is coarse", PinLogic.isCoarseFix(0.0), true)
+    expect("NaN accuracy is coarse", PinLogic.isCoarseFix(Double.NaN), true)
+
+    // ① 위치가 아직 없을 때는 대략 위치라도 첫 핀으로 받는다 (임시 위치)
+    expect(
+        "no fix yet accepts 840m cell fix as first",
+        verdict(false, 0L, 0.0, 0L, now, 840.0),
+        firstCoarse
+    )
+    expect("first precise fix", verdict(false, 0L, 0.0, 0L, now, 12.0), accept)
+
+    // ② 정밀 위치가 2분 안에 있었으면 기지국 값(840m)을 버린다 — 핀이 튀지 않게
+    expect(
+        "cell fix dropped while GPS was 5s ago",
+        verdict(true, now - 5_000, 8.0, now - 5_000, now, 840.0),
+        dropCoarse
+    )
+    expect(
+        "cell fix dropped while precise fix is still the previous one",
+        verdict(true, now - 30_000, 12.0, now - 30_000, now, 600.0),
+        dropCoarse
+    )
+    expect(
+        "cell fix dropped when precise was 119s ago",
+        verdict(true, now - 119_000, 6.0, now - 119_000, now, 840.0),
+        dropCoarse
+    )
+    // 정확도를 모르는 측정도 같은 규칙으로 버린다
+    expect(
+        "unknown accuracy dropped while precise was recent",
+        verdict(true, now - 10_000, 6.0, now - 10_000, now, 0.0),
+        dropCoarse
+    )
+    // ±60m Wi-Fi 융합 위치도 기지국 ±840m 보다 낫다 — 번갈아 튀지 않게 지킨다
+    expect(
+        "cell fix dropped while a 60m fix is recent",
+        verdict(true, now - 8_000, 60.0, 0L, now, 840.0),
+        dropCoarse
+    )
+    expect(
+        "cell fix dropped while a 140m fix is recent",
+        verdict(true, now - 8_000, 140.0, 0L, now, 840.0),
+        dropCoarse
+    )
+
+    // ③ 경계 — 정확히 2분이면 아직 막고, 넘으면 받아들인다 (핀이 영영 멈추지 않게)
+    expect(
+        "cell fix dropped at exactly 120s",
+        verdict(true, now - 120_000, 6.0, now - 120_000, now, 840.0),
+        dropCoarse
+    )
+    expect(
+        "cell fix accepted after 121s without precise",
+        verdict(true, now - 121_000, 6.0, now - 121_000, now, 840.0),
+        accept
+    )
+    expect(
+        "cell fix accepted when precise was 3min ago",
+        verdict(true, now - 180_000, 6.0, now - 180_000, now, 840.0),
+        accept
+    )
+
+    // ④ 대략 위치만 있는 상태에서 좋아진 대략 위치는 받아들인다
+    expect(
+        "coarse to better coarse is accepted",
+        verdict(true, now - 3_000, 840.0, 0L, now, 300.0),
+        accept
+    )
+
+    // ⑤ 정밀 위치는 언제나 이긴다 (기지국 840m 위에 있는 상태에서 GPS 12m)
+    expect(
+        "precise fix replaces coarse fix",
+        verdict(true, now - 3_000, 840.0, 0L, now, 12.0),
+        accept
+    )
+    // ⑥ 늦게 도착한 옛 측정은 그대로 버린다 (v1.0.10 규칙 유지)
+    expect(
+        "late old measurement is dropped",
+        verdict(true, now, 8.0, now, now - 20_000, 4.0),
+        dropStale
+    )
+
+    // ⑦ 기기 시계가 뒤로 간 경우에도 '최근 정밀 위치'로 본다 (필터가 영영 켜지지 않게)
+    expect(
+        "precise fix with clock moved back counts as recent",
+        PinLogic.preciseFixRecent(now + 30_000, now),
+        true
+    )
+    expect("no precise fix yet", PinLogic.preciseFixRecent(0L, now), false)
+
+    // ⑧ 마지막 위치 고르기 — 기지국 값이 더 새것이어도 정밀한 GPS 를 쓴다
+    val gpsLast = Fix(37.752287, 127.069945, accuracyMeters = 12.0, at = now - 40_000)
+    val cellLast = Fix(37.750393, 127.060652, accuracyMeters = 840.0, at = now - 1_000)
+    expect("precise last known wins over newer cell", PinLogic.pickLastKnown(listOf(cellLast, gpsLast)), gpsLast)
+    expect("newest wins when all are coarse", PinLogic.pickLastKnown(listOf(gpsLast, cellLast).map { it.copy(accuracyMeters = 900.0) })?.at, now - 1_000)
+    expect("no candidates", PinLogic.pickLastKnown(emptyList()), null)
+
+    // 진단 표기
+    expect("accuracy label", PinLogic.accuracyLabel(840.4), "±840m")
+    expect("accuracy label unknown", PinLogic.accuracyLabel(0.0), "±-")
 }
 
 // --------------------------------------------- 지도 핀 색 (v1.0.10)

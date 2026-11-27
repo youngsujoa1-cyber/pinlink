@@ -142,6 +142,31 @@ class MapFollowTest {
     }
 
     @Test
+    fun coarseCellFixDoesNotDragPinAway() {
+        val app = RuntimeEnvironment.getApplication()
+        openMap(app, "MOVE05")
+        val now = nextFixTime()
+        // 정밀 위치(GPS ±8m) — 두 기기가 같이 있던 자리
+        PinSession.onLocation(fix(37.752287, 127.069945, now, accuracy = 8f))
+        assertEquals("정밀 위치가 먼저 들어온다", 37.752287, PinSession.myFix!!.lat, 1e-6)
+        val drops = PinSession.coarseDropCount
+
+        // 같은 자리인데 기지국 삼각측량이 약 840m 옆으로 잡혔다 (실서버 rooms/AFZZE7, 2026-11-28)
+        PinSession.onLocation(
+            Location(PIN_PROVIDER_NETWORK).apply {
+                latitude = 37.750393
+                longitude = 127.060652
+                time = now + 3_000
+                accuracy = 840f
+            }
+        )
+        assertEquals("기지국 값은 정밀 위치를 덮지 않는다", 37.752287, PinSession.myFix!!.lat, 1e-6)
+        assertEquals("경도도 그대로", 127.069945, PinSession.myFix!!.lng, 1e-6)
+        assertTrue("무시한 사실이 진단에 남는다", PinSession.coarseDropCount > drops)
+        assertTrue("무시한 기지국 정확도가 남는다: ${PinSession.coarseDropNote}", PinSession.coarseDropNote.contains("840"))
+    }
+
+    @Test
     fun movingMemberChangesMapJson() {
         val app = RuntimeEnvironment.getApplication()
         val map = HybridMapView(app)
@@ -201,5 +226,8 @@ class MapFollowTest {
     companion object {
         /** 검사 사이에 계속 앞으로 가는 시각 — 측정이 앞 검사 값에 가려 버려지지 않게 */
         private val CLOCK = java.util.concurrent.atomic.AtomicLong(System.currentTimeMillis())
+
+        /** 기지국(통신사) 측정값의 제공자 이름 — 정확도가 낮게 온다 */
+        private const val PIN_PROVIDER_NETWORK = "network"
     }
 }

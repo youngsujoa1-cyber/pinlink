@@ -12,6 +12,7 @@ fragment = "1.5.4"
 exifinterface = "1.3.2"
 camerax = "1.4.1"
 playServicesAds = "23.5.0"
+playServicesLocation = "21.0.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -32,6 +33,7 @@ androidx-camera-view = { group = "androidx.camera", name = "camera-view", versio
 # AdMob (guava: CameraX 공개 API 가 요구하는 ListenableFuture)
 guava = { group = "com.google.guava", name = "guava", version = "33.3.1-android" }
 play-services-ads = { group = "com.google.android.gms", name = "play-services-ads", version.ref = "playServicesAds" }
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

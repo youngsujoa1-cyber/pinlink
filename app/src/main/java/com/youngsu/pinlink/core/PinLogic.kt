@@ -427,8 +427,9 @@ object PinLogic {
     /** 살아 있는 측정이 없을 때 다시 요청하는 간격 */
     const val FIX_RETRY_MS = 15_000L
 
-    /** 이보다 부정확한 측정은 '대략 위치' — 더 좋은 값이 오면 그쪽을 쓴다 */
-    const val FIX_COARSE_ACCURACY_M = 500.0
+    /** 이보다 부정확한 측정은 '대략 위치' — 더 좋은 값이 오면 그쪽을 쓴다.
+     * (v1.0.10 은 500m 였지만, 기지국 값이 840m 튀는 것을 막기 위해 v1.0.11 에서 아래 `FIX_COARSE_ACCURACY_M`(150m)로 내렸다) */
+    const val FIX_COARSE_LEGACY_ACCURACY_M = 500.0
 
     /** [at] 에 받은 측정이 아직 '살아 있는가' (기기 시계가 뒤로 간 경우도 살아 있는 것으로 본다) */
     fun fixFresh(at: Long, now: Long, limitMs: Long = FIX_ALIVE_MS): Boolean =
@@ -463,6 +464,110 @@ object PinLogic {
         val oldAcc = if (oldAccuracy > 0.0) oldAccuracy else Double.MAX_VALUE
         val newAcc = if (newAccuracy > 0.0) newAccuracy else Double.MAX_VALUE
         return newAcc < oldAcc
+    }
+
+    // ------------------------------------------- 정밀 융합 위치 · 기지국 튐 방지 (v1.0.11)
+
+    /**
+     * 2026-11-28 실서버 `rooms/AFZZE7` 확인: 두 기기가 같은 자리에 있는데 `홍` 이 약 840m 옆에 떴다.
+     * 카카오맵은 붙어 나오는데 PinLink 만 어긋난 이유는, 앱이 Android 기본 LocationManager 만 써서
+     * GPS 가 약해진 순간 통신사 기지국 삼각측량(`NETWORK_PROVIDER`, 오차 수백m~1km)을 그대로 쓴 탓이다.
+     * 카카오맵은 Google Play Services 융합 위치(Wi-Fi + GPS + 기지국)를 쓰므로 실내·차 안에서도 오차가 작다.
+     *
+     * 아래 값들은 그 원인을 두 겹으로 막는다.
+     *  1) [FusedSource] — Play Services 융합 위치를 1순위로 받는다(정확도가 좋다)
+     *  2) [fixVerdict] — 그래도 들어온 기지국 대략 위치가 정밀 위치를 덮어쓰지 못하게 거른다
+     */
+
+    /** 이 정도로 정확하면 '정밀 위치'로 본다 (m) — GPS·융합이 보통 5~30m 로 준다 */
+    const val FIX_PRECISE_ACCURACY_M = 50.0
+
+    /** 이보다 부정확한 측정은 '기지국 대략 위치'로 본다 (m) — 수백m~1km 어긋난다 */
+    const val FIX_COARSE_ACCURACY_M = 150.0
+
+    /** 정밀 위치를 '방금 잡힌 것'으로 보는 시간 (2분) — 이 안에서는 기지국 값으로 덮지 않는다 */
+    const val FIX_PRECISE_WINDOW_MS = 2 * 60_000L
+
+    /** 정확도를 알고 그 값이 [FIX_PRECISE_ACCURACY_M] 이하인가 (융합·GPS) */
+    fun isPreciseFix(accuracyMeters: Double): Boolean =
+        accuracyMeters.isFinite() && accuracyMeters > 0.0 && accuracyMeters <= FIX_PRECISE_ACCURACY_M
+
+    /**
+     * '기지국 대략 위치'인가 — 정확도를 모르거나(0) [FIX_COARSE_ACCURACY_M] 를 넘을 때.
+     * 정확도를 모르는 측정은 믿지 않는다(지도에 840m 튀는 값의 정체가 대개 이것이다).
+     */
+    fun isCoarseFix(accuracyMeters: Double): Boolean =
+        !accuracyMeters.isFinite() || accuracyMeters <= 0.0 || accuracyMeters > FIX_COARSE_ACCURACY_M
+
+    /** [at] 에 정밀 위치를 잡았고 아직 [windowMs] 안인가 (기기 시계가 뒤로 가도 '최근'으로 본다) */
+    fun preciseFixRecent(lastPreciseAt: Long, now: Long, windowMs: Long = FIX_PRECISE_WINDOW_MS): Boolean {
+        if (lastPreciseAt <= 0L) return false
+        if (now < lastPreciseAt) return true
+        return now - lastPreciseAt <= windowMs
+    }
+
+    /** 측정값 처리 결과 (v1.0.11) */
+    enum class FixVerdict {
+        /** 그대로 쓴다 */
+        ACCEPT,
+
+        /** 위치가 아직 하나도 없어서 대략 위치라도 첫 핀으로 쓴다 (SyncLog 에 정확도를 남긴다) */
+        ACCEPT_COARSE_FIRST,
+
+        /** 최근 2분 안에 정밀 위치가 있었으므로 기지국 대략 위치를 무시한다 */
+        DROP_COARSE,
+
+        /** 늦게 도착한 옛 측정이라 버린다 */
+        DROP_STALE
+    }
+
+    /**
+     * 들어온 측정값을 쓸지 정한다 (v1.0.11).
+     *
+     * 순서
+     *  1. 기지국 대략 위치(>150m 또는 정확도 모름)일 때
+     *     - 위치가 아직 하나도 없으면 첫 핀으로 받아들인다([FixVerdict.ACCEPT_COARSE_FIRST])
+     *     - 최근 [FIX_PRECISE_WINDOW_MS] 안에 정밀 위치(≤50m)가 있었으면 **버린다**([FixVerdict.DROP_COARSE])
+     *     - 지금 값이 이미 기지국보다 나은 값(≤150m)이고 2분 안이면 그것도 지킨다
+     *       (Wi-Fi 융합 위치가 ±60m 로 오는 기기에서 기지국 ±800m 와 번갈아 튀지 않게)
+     *     - 그보다 오래됐으면(2분 넘게 좋은 위치가 없었다) 받아들인다 — 핀이 영영 멈추지 않게
+     *  2. 그 밖에는 [betterFix] 규칙(더 새 값 채택, 같은 시각이면 정확도가 좋은 쪽)
+     *     - 버려야 하는데 지금 값이 아직 살아 있으면 옛 측정으로 보고 버린다([FixVerdict.DROP_STALE])
+     */
+    fun fixVerdict(
+        hasFix: Boolean,
+        previousAt: Long,
+        previousAccuracy: Double,
+        lastPreciseAt: Long,
+        newAt: Long,
+        newAccuracy: Double,
+        now: Long
+    ): FixVerdict {
+        if (isCoarseFix(newAccuracy)) {
+            if (!hasFix) return FixVerdict.ACCEPT_COARSE_FIRST
+            val recentGood = !isCoarseFix(previousAccuracy) && fixFresh(previousAt, now, FIX_PRECISE_WINDOW_MS)
+            if (recentGood || preciseFixRecent(lastPreciseAt, now)) return FixVerdict.DROP_COARSE
+        }
+        if (!betterFix(previousAt, previousAccuracy, newAt, newAccuracy) && fixFresh(previousAt, now)) {
+            return FixVerdict.DROP_STALE
+        }
+        return FixVerdict.ACCEPT
+    }
+
+    /** 진단에 쓰는 정확도 표기 — `±12m`, 모르면 `±-` */
+    fun accuracyLabel(accuracyMeters: Double): String =
+        if (accuracyMeters.isFinite() && accuracyMeters > 0.0) "±${accuracyMeters.roundToInt()}m" else "±-"
+
+    /**
+     * 마지막으로 알던 위치 후보 중 하나를 고른다 — 정밀한 것 우선, 그 안에서 가장 새것.
+     * 정밀한 후보가 없으면 가장 새 후보를 쓴다(첫 핀이라도 보여 준다).
+     * (v1.0.11: 제공자별 마지막 위치 중 '가장 새것'만 고르면 기지국 값이 GPS 값을 이겨 840m 튀었다)
+     */
+    fun pickLastKnown(candidates: List<Fix>): Fix? {
+        val usable = candidates.filter { it.valid && it.at > 0L }
+        if (usable.isEmpty()) return null
+        val precise = usable.filter { isPreciseFix(it.accuracyMeters) }
+        return (if (precise.isNotEmpty()) precise else usable).maxByOrNull { it.at }
     }
 
     // ------------------------------------------------------------ 주기 (v1.0.9)

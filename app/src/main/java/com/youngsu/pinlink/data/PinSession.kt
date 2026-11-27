@@ -14,6 +14,15 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GoogleApiAvailability
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationAvailability
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import com.youngsu.pinlink.core.ChatMessage
 import com.youngsu.pinlink.core.Fix
 import com.youngsu.pinlink.core.MeetingPoint
@@ -34,6 +43,11 @@ import java.util.concurrent.CopyOnWriteArrayList
  *    (v1.0.9 — 무료 한도(하루 읽기 5만·쓰기 2만)가 여러 대를 켜 두자 하루 만에 차서 요청을 줄였다)
  *  - 429(일일 무료 사용량 초과)를 받으면 30~60초 쉬었다가 다시 보낸다(안내는 10분에 한 번).
  *  - 고른 시간이 끝나면 스스로 멈춘다(알림·핀도 함께 사라진다).
+ *
+ * 위치(v1.0.11): Google Play Services **정밀 융합 위치**([FusedLocationProviderClient], 2.5초·고정밀)를
+ * 1순위로 쓰고, Play Services 가 없는 기기에서는 기존 `LocationManager`(융합·GPS·기지국)로 돌아간다.
+ * 그래도 들어오는 기지국 대략 위치(>150m)는 최근 2분 안에 정밀 위치(≤50m)가 있었으면 버린다
+ * ([PinLogic.fixVerdict]) — 같은 자리에 있는 두 기기가 840m 떨어져 보이던 문제(2026-11-28 `rooms/AFZZE7`).
  */
 object PinSession {
 
@@ -43,6 +57,11 @@ object PinSession {
      *  이 제공자가 없는 기기에서는 [supports] 가 걸러 낸다)
      */
     private const val FUSED_PROVIDER = "fused"
+
+    /** Play Services 융합 위치 요청 간격 — 2.5초마다, 최소 1초(0m 이동도 받는다) (v1.0.11) */
+    private const val FUSED_INTERVAL_MS = 2_500L
+    private const val FUSED_MIN_INTERVAL_MS = 1_000L
+    private const val FUSED_MAX_DELAY_MS = 5_000L
 
     /** 지금 상태(화면 켜짐·채팅 보고 있음)에 맞는 폴링 주기 — v1.0.8 */
     private val timing: PinLogic.PollTiming
@@ -194,6 +213,31 @@ object PinSession {
     /** 지금 등록되어 있는 위치 제공자들 */
     @Volatile var locationProviders: List<String> = emptyList()
         private set
+
+    // ------------------------------------ 정밀 융합 위치 · 기지국 튐 방지 (v1.0.11)
+
+    /** 융합 위치(Play Services)를 쓰고 있는가 — 설정의 등록 제공자에 `fused(gms)` 로 보인다 */
+    @Volatile var fusedActive: Boolean = false
+        private set
+
+    /** 융합 위치 상태 (ok · gms:2 · fail …) — 복사용 진단에만 남긴다 */
+    @Volatile var fusedNote: String = ""
+        private set
+
+    /** 마지막으로 **정밀** 위치(≤50m)를 받아들인 시각 — 기지국 값이 덮지 못하게 하는 기준 */
+    @Volatile private var lastPreciseAt = 0L
+
+    /** 마지막으로 받은 측정(버린 것 포함) 시각 — 추적이 살아 있는지 보는 데 쓴다 */
+    @Volatile private var lastSeenAt = 0L
+
+    /** 기지국 대략 위치를 버린 횟수 (v1.0.11 — 진단) */
+    @Volatile var coarseDropCount: Int = 0
+        private set
+
+    @Volatile private var lastDropAt = 0L
+    @Volatile private var lastDropAccuracy = 0.0
+    @Volatile private var lastDropProvider = ""
+    @Volatile private var lastDropLoggedAt = 0L
 
     /** 마지막으로 '한 번만 받기'를 요청한 시각 — 요청 폭주를 막는다 */
     @Volatile private var lastFixAttemptAt = 0L
@@ -713,28 +757,62 @@ object PinSession {
     fun onLocation(location: Location) {
         if (!location.latitude.isFinite() || !location.longitude.isFinite()) return
         if (location.latitude == 0.0 && location.longitude == 0.0) return
-        val at = if (location.time > 0L) location.time else System.currentTimeMillis()
-        val accuracy = if (location.hasAccuracy()) location.accuracy.toDouble() else 0.0
-        val previous = myFix
-        // 늦게 도착한 옛 측정·아주 부정확한 측정은 버린다 — 핀이 뒤로 튀지 않게 (v1.0.10)
-        if (!PinLogic.betterFix(previous?.at ?: 0L, previous?.accuracyMeters ?: 0.0, at, accuracy)) {
-            // 단, 지금 값이 이미 오래됐다면(기기 시계가 뒤로 간 경우 포함) 새 값을 받아들인다 —
-            // 그렇지 않으면 시계가 한 번 어긋난 뒤로 모든 측정이 거부되어 핀이 영영 멈춘다
-            if (PinLogic.fixFresh(previous?.at ?: 0L, System.currentTimeMillis())) return
-        }
-        val rawSpeedMps = if (location.hasSpeed()) location.speed.toDouble() else null
-        val fix = Fix(
+        onFix(
             lat = location.latitude,
             lng = location.longitude,
-            speedMps = rawSpeedMps ?: 0.0,
-            accuracyMeters = accuracy,
+            speedMps = if (location.hasSpeed()) location.speed.toDouble() else null,
+            accuracyMeters = if (location.hasAccuracy()) location.accuracy.toDouble() else 0.0,
+            at = if (location.time > 0L) location.time else System.currentTimeMillis(),
+            provider = location.provider.orEmpty()
+        )
+    }
+
+    /**
+     * 측정값 하나를 받아들일지 정하고([PinLogic.fixVerdict]), 받아들이면 상태를 갱신한다 (v1.0.11).
+     *
+     * - 최근 2분 안에 정밀 위치(≤50m)가 있었으면 기지국 대략 위치(>150m)는 **버린다** — 핀이 840m 튀지 않게
+     * - 위치가 아직 하나도 없을 때만 대략 위치를 임시 첫 핀으로 받아들이고, 정확도를 SyncLog 에 남긴다
+     * - 늦게 도착한 옛 측정도 그대로 버린다(v1.0.10)
+     */
+    private fun onFix(lat: Double, lng: Double, speedMps: Double?, accuracyMeters: Double, at: Long, provider: String) {
+        val now = System.currentTimeMillis()
+        lastSeenAt = now
+        val previous = myFix
+        val verdict = PinLogic.fixVerdict(
+            hasFix = previous != null,
+            previousAt = previous?.at ?: 0L,
+            previousAccuracy = previous?.accuracyMeters ?: 0.0,
+            lastPreciseAt = lastPreciseAt,
+            newAt = at,
+            newAccuracy = accuracyMeters,
+            now = now
+        )
+        when (verdict) {
+            PinLogic.FixVerdict.DROP_COARSE -> {
+                noteCoarseDrop(accuracyMeters, provider, now)
+                return
+            }
+            PinLogic.FixVerdict.DROP_STALE -> return
+            PinLogic.FixVerdict.ACCEPT_COARSE_FIRST -> SyncLog.record(
+                "gps",
+                "초기 위치 ${PinLogic.accuracyLabel(accuracyMeters)} (${provider.ifBlank { "-" }}) — 정밀 위치가 잡히면 바로 바꿈"
+            )
+            PinLogic.FixVerdict.ACCEPT -> {}
+        }
+        val fix = Fix(
+            lat = lat,
+            lng = lng,
+            speedMps = speedMps ?: 0.0,
+            accuracyMeters = accuracyMeters,
             at = at
         )
         if (!fix.valid) return
+        // 정밀 위치를 받아들인 시각 — 이 뒤 2분 동안은 기지국 값이 이 자리를 덮지 못한다
+        if (PinLogic.isPreciseFix(accuracyMeters)) lastPreciseAt = now
         // 속도: GPS 가 주면 그대로, 아니면 두 측정값 사이 거리·시간으로 계산한다.
         // 2km/h 미만(GPS 흔들림)은 0 = 정지로 본다.
-        val speedKmh = if (rawSpeedMps != null && rawSpeedMps >= 0.0) {
-            PinLogic.speedKmh(rawSpeedMps)
+        val speedKmh = if (speedMps != null && speedMps >= 0.0) {
+            PinLogic.speedKmh(speedMps)
         } else {
             PinLogic.speedKmhBetween(previousFix, fix)
         }
@@ -742,9 +820,9 @@ object PinSession {
         myFix = fix
         mySpeedKmh = speedKmh
         // 진단(설정 → 동기화 진단)에 보여 줄 마지막 측정 정보 (v1.0.10)
-        lastFixAt = System.currentTimeMillis()
-        lastFixProvider = location.provider.orEmpty()
-        lastFixAccuracy = accuracy
+        lastFixAt = now
+        lastFixProvider = provider
+        lastFixAccuracy = accuracyMeters
         locationFixCount++
         // 체류 시간: 70m 넘게 벗어나거나 움직이기 시작하면 '지금'으로 다시 잡는다
         val nextStay = PinLogic.nextStaySince(myStaySince, stayAnchor, fix, speedKmh)
@@ -764,6 +842,27 @@ object PinSession {
         // 위치 올리기 (v1.0.9) — 측정값이 올 때마다 덮어쓰지 않고, 5m 이상 움직였거나 30초(꺼짐 45초)가
         // 지났을 때만 올린다. 쿨다운(429) 중에는 아예 보내지 않는다.
         if (isSharingNow() && !inQuotaCooldown) uploadMine()
+    }
+
+    /**
+     * 기지국 대략 위치(>150m)를 버렸다 — 진단에 남긴다 (v1.0.11).
+     * 측정은 3초마다 오므로 기록은 30초에 한 번만 남긴다.
+     */
+    private fun noteCoarseDrop(accuracyMeters: Double, provider: String, now: Long) {
+        coarseDropCount++
+        lastDropAt = now
+        lastDropAccuracy = accuracyMeters
+        lastDropProvider = provider
+        if (lastDropLoggedAt <= 0L || now < lastDropLoggedAt || now - lastDropLoggedAt >= 30_000L) {
+            lastDropLoggedAt = now
+            val preciseAgo = if (lastPreciseAt > 0L) ((now - lastPreciseAt) / 1000L).coerceAtLeast(0L) else -1L
+            SyncLog.record(
+                "gps",
+                "기지국 측정 무시 ${PinLogic.accuracyLabel(accuracyMeters)} (${provider.ifBlank { "-" }}) · " +
+                    if (preciseAgo >= 0L) "정밀 위치 ${preciseAgo}초 전" else "정밀 위치 없음"
+            )
+            notifyChanged()
+        }
     }
 
     private fun movingFrom(previous: Fix?, current: Fix): Boolean {
@@ -1042,13 +1141,18 @@ object PinSession {
     }
 
     /**
-     * 위치 요청을 건다 (v1.0.10).
+     * 위치 요청을 건다 (v1.0.10 → v1.0.11).
      *
      * v1.0.9 까지는 **한 제공자만** 골라 걸었다 — GPS 가 켜져 있으면 GPS 에만 걸고,
      * 등록이 한 번 실패하거나 GPS 칩이 측정을 멈추면 다시 요청할 길이 없어
      * 파란이 점과 상대방 핀이 마지막 자리에 그대로 멈췄다(실기기: "안 움직여" · "Gps 못잡는듯").
-     * 이제는 융합(fused, 안드로이드 12+) · GPS · 네트워크를 **각각 따로** 걸고(하나가 실패해도 나머지는 산다),
-     * 살아 있는 측정이 없으면 워치독이 15초마다 한 번씩 강제로 다시 받는다.
+     * v1.0.10 은 융합(fused, 안드로이드 12+) · GPS · 네트워크를 **각각 따로** 걸어 하나가 죽어도 나머지가 살게 했다.
+     *
+     * v1.0.11 — 그 "시스템 융합"은 안드로이드 12+ 에만 있고, 실내·차 안에서 GPS 가 약해지면
+     * 통신사 기지국 삼각측량(수백m~1km)으로 떨어졌다(실서버 `rooms/AFZZE7` 에서 840m).
+     * 이제 **Google Play Services 융합 위치**(카카오맵과 같은 경로 — Wi-Fi + GPS + 기지국)를 1순위로 걸고,
+     * 기기 위치(GPS · 기지국)는 그것이 없을 때를 위한 보조로 함께 걸어 둔다.
+     * 들어오는 기지국 값은 [PinLogic.fixVerdict] 가 정밀 위치를 덮지 못하게 거른다.
      */
     @SuppressLint("MissingPermission")
     @Synchronized
@@ -1065,6 +1169,9 @@ object PinSession {
                 SyncLog.record("gps", "$provider 꺼짐 — 다른 제공자로 계속")
             }
         }.also { listener = it }
+
+        // 1순위 — Play Services 정밀 융합 위치 (실패하면 아래 기기 위치만으로 계속)
+        startFusedUpdates()
 
         val fine = hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
         val wanted = ArrayList<String>(3)
@@ -1084,20 +1191,127 @@ object PinSession {
         }
         registered.clear()
         registered.addAll(madeProviders)
-        locationProviders = registered.toList()
+        locationProviders = describeProviders()
 
         // 아직 측정이 없으면 마지막으로 알던 위치라도 바로 보여 준다 (앱을 열자마자 내 핀이 보이게)
         if (myFix == null) bestLastKnown(manager)?.let { onLocation(it) }
-        if (registered.isEmpty()) {
+        if (registered.isEmpty() && !fusedActive) {
             SyncLog.record("gps", "걸린 제공자 없음 — 15초마다 다시 시도")
             requestSingleFix("register-failed")
         }
         startFixWatchdog()
     }
 
+    /** 진단에 보여 줄 제공자 목록 — 융합(Play Services)이 걸려 있으면 맨 앞에 `fused(gms)` */
+    private fun describeProviders(): List<String> {
+        val out = ArrayList<String>(registered.size + 1)
+        if (fusedActive) out.add("fused(gms)")
+        out.addAll(registered)
+        return out
+    }
+
+    /**
+     * Play Services 정밀 융합 위치를 건다 (v1.0.11). 걸렸으면 true.
+     *
+     * 오차를 줄이는 것이 목적이므로 `PRIORITY_HIGH_ACCURACY` · 2.5초 · 최소 이동 0m 로 받는다
+     * (서버 업로드는 그대로 5m/30초로 줄여 보낸다 — 여기서는 '정확한 값을 자주 받아 두는' 것뿐이다).
+     * Play Services 가 없거나 요청이 거부되면 false 를 돌려주고 기기 위치로 계속 돈다.
+     */
+    @SuppressLint("MissingPermission")
+    @Synchronized
+    private fun startFusedUpdates(): Boolean {
+        if (fusedCallback != null) return fusedActive
+        if (!hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) return false
+        val status = runCatching {
+            GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(app)
+        }.getOrDefault(ConnectionResult.SERVICE_MISSING)
+        if (status != ConnectionResult.SUCCESS) {
+            fusedActive = false
+            fusedNote = "gms:$status"
+            SyncLog.record("gps", "융합 위치 사용 불가(gms $status) — 기기 위치로 계속")
+            return false
+        }
+        val client = runCatching { LocationServices.getFusedLocationProviderClient(app) }.getOrNull()
+        if (client == null) {
+            fusedActive = false
+            fusedNote = "client:null"
+            SyncLog.record("gps", "융합 위치 클라이언트 없음 — 기기 위치로 계속")
+            return false
+        }
+        val request = runCatching {
+            LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, FUSED_INTERVAL_MS)
+                .setMinUpdateIntervalMillis(FUSED_MIN_INTERVAL_MS)
+                .setMaxUpdateDelayMillis(FUSED_MAX_DELAY_MS)
+                .setMinUpdateDistanceMeters(0f)
+                .setWaitForAccurateLocation(false)
+                .build()
+        }.getOrNull()
+        if (request == null) {
+            fusedNote = "request:null"
+            return false
+        }
+        val callback = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                for (location in result.locations) onLocation(location)
+            }
+
+            override fun onLocationAvailability(available: LocationAvailability) {
+                // 잠시 측정이 없어도 등록은 그대로 둔다 — 다시 올라오면 그대로 받는다.
+                // (같은 안내가 계속 쌓이지 않게 상태가 바뀔 때만 한 줄)
+                if (available.isLocationAvailable) {
+                    fusedUnavailableLogged = false
+                } else if (!fusedUnavailableLogged) {
+                    fusedUnavailableLogged = true
+                    SyncLog.record("gps", "융합 측정 잠시 없음 — 기기 위치로 계속")
+                }
+            }
+        }
+        val task = runCatching {
+            client.requestLocationUpdates(request, callback, Looper.getMainLooper())
+        }.getOrNull()
+        if (task == null) {
+            fusedActive = false
+            fusedNote = "register:null"
+            SyncLog.record("gps", "융합 위치 요청 실패 — 기기 위치로 계속")
+            return false
+        }
+        fusedClient = client
+        fusedCallback = callback
+        fusedActive = true
+        fusedNote = "ok"
+        task.addOnFailureListener { error ->
+            // 등록이 비동기로 거부되는 경우(구글 플레이 서비스 꺼짐 등) — 기기 위치는 그대로 살아 있고,
+            // 다음 재등록(reregister)에서 융합을 다시 시도할 수 있게 등록 상태를 비운다
+            synchronized(this) {
+                if (fusedCallback === callback) {
+                    fusedClient = null
+                    fusedCallback = null
+                }
+                fusedActive = false
+                fusedNote = "fail:${error.javaClass.simpleName}"
+            }
+            SyncLog.record("gps", "융합 위치 요청 거부(${error.javaClass.simpleName}) — 기기 위치로 계속")
+            notifyChanged()
+        }
+        SyncLog.record("gps", "융합 위치 시작 ${FUSED_INTERVAL_MS}ms · 고정밀")
+        return true
+    }
+
+    /** 융합 위치 등록을 푼다 */
+    @Synchronized
+    private fun stopFusedUpdates() {
+        val client = fusedClient
+        val callback = fusedCallback
+        fusedClient = null
+        fusedCallback = null
+        fusedActive = false
+        if (client != null && callback != null) runCatching { client.removeLocationUpdates(callback) }
+    }
+
     @Synchronized
     private fun stopLocationUpdates() {
         stopFixWatchdog()
+        stopFusedUpdates()
         val manager = locationManager
         val made = listener
         if (manager != null && made != null) runCatching { manager.removeUpdates(made) }
@@ -1107,6 +1321,11 @@ object PinSession {
         listener = null
     }
 
+    private var fusedClient: FusedLocationProviderClient? = null
+    private var fusedCallback: LocationCallback? = null
+
+    /** '융합 측정 없음'을 이미 한 번 남겼는가 — 같은 안내가 로그를 덮지 않게 */
+    @Volatile private var fusedUnavailableLogged = false
     private var listener: LocationListener? = null
     private val madeProviders = HashSet<String>()
     private val registered = HashSet<String>()
@@ -1115,16 +1334,26 @@ object PinSession {
     private fun supports(manager: LocationManager, provider: String): Boolean =
         runCatching { manager.allProviders?.contains(provider) == true }.getOrDefault(false)
 
-    /** 마지막으로 알던 위치 중 가장 새것 · 가장 정확한 것 */
+    /** 마지막으로 알던 위치 중 가장 새것 · 가장 정확한 것 — 기지국 값이 GPS 를 이기지 않게 (v1.0.11) */
     @SuppressLint("MissingPermission")
     private fun bestLastKnown(manager: LocationManager): Location? {
-        val candidates = ArrayList<Location>(3)
+        val pairs = ArrayList<Pair<Location, Fix>>(3)
         for (provider in listOf(FUSED_PROVIDER, LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)) {
             if (!supports(manager, provider)) continue
-            runCatching { manager.getLastKnownLocation(provider) }.getOrNull()?.let { candidates.add(it) }
+            val location = runCatching { manager.getLastKnownLocation(provider) }.getOrNull() ?: continue
+            if (location.latitude == 0.0 && location.longitude == 0.0) continue
+            pairs.add(
+                location to Fix(
+                    lat = location.latitude,
+                    lng = location.longitude,
+                    accuracyMeters = if (location.hasAccuracy()) location.accuracy.toDouble() else 0.0,
+                    at = location.time
+                )
+            )
         }
-        return candidates.filter { it.latitude != 0.0 || it.longitude != 0.0 }
-            .maxByOrNull { it.time }
+        // 제공자별 마지막 위치 중 '가장 새것'만 고르면 기지국 값이 GPS 를 이겨 핀이 튄다 — 정밀한 것을 먼저
+        val best = PinLogic.pickLastKnown(pairs.map { it.second }) ?: return null
+        return pairs.firstOrNull { it.second === best }?.first
     }
 
     /**
@@ -1136,12 +1365,32 @@ object PinSession {
     @Suppress("DEPRECATION")
     private fun requestSingleFix(reason: String) {
         if (!hasForegroundPermission()) return
-        val manager = locationManager ?: return
-        val made = listener ?: return
         val now = System.currentTimeMillis()
         if (fixRequestBusy) return
         if (lastFixAttemptAt > 0L && now >= lastFixAttemptAt && now - lastFixAttemptAt < 2_000L) return
         lastFixAttemptAt = now
+
+        // 융합 위치가 걸려 있으면 그쪽에 '지금 한 번'을 요청한다 — 기지국 값이 아니라 Wi-Fi+GPS 로 (v1.0.11)
+        val fused = fusedClient
+        if (fused != null && fusedActive) {
+            val task = runCatching { fused.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null) }.getOrNull()
+            if (task != null) {
+                fixRequestBusy = true
+                task.addOnSuccessListener { location: Location? ->
+                    fixRequestBusy = false
+                    if (location != null) onLocation(location)
+                    else SyncLog.record("gps", "$reason · 융합 측정 없음")
+                }
+                task.addOnFailureListener { error ->
+                    fixRequestBusy = false
+                    SyncLog.record("gps", "$reason · 융합 요청 실패(${error.javaClass.simpleName})")
+                }
+                return
+            }
+        }
+
+        val manager = locationManager ?: return
+        val made = listener ?: return
 
         val fine = hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
         val provider = when {
@@ -1188,6 +1437,14 @@ object PinSession {
 
     @Volatile private var reregistering = false
 
+    /** 버린 기지국 측정 한 줄 — 복사용 진단에 그대로 넣는다 (없으면 "") */
+    val coarseDropNote: String
+        get() {
+            if (lastDropAt <= 0L) return ""
+            val ago = ((System.currentTimeMillis() - lastDropAt) / 1000L).coerceAtLeast(0L)
+            return "drop: ${PinLogic.accuracyLabel(lastDropAccuracy)} ${lastDropProvider.ifBlank { "-" }} ${ago}s ago (${coarseDropCount})"
+        }
+
     /**
      * 5초마다 '살아 있는 측정'을 확인한다 — 20초 넘게 측정이 없으면 15초 간격으로 한 번씩 다시 받는다.
      * (GPS 칩이 조용해져도 파란 점이 영영 멈추지 않게 하는 마지막 안전장치)
@@ -1200,7 +1457,8 @@ object PinSession {
             if (fixRequestBusy && lastFixAttemptAt > 0L && now - lastFixAttemptAt > 30_000L) {
                 fixRequestBusy = false
             }
-            if (PinLogic.fixRetryDue(lastFixAt, lastFixAttemptAt, now)) {
+            // 버린 측정도 '살아 있는 신호'로 본다 — 기지국 값만 오는데 15초마다 강제 요청을 겹치지 않게
+            if (PinLogic.fixRetryDue(maxOf(lastFixAt, lastSeenAt), lastFixAttemptAt, now)) {
                 requestSingleFix("watchdog")
             }
             main.postDelayed(this, 5_000L)

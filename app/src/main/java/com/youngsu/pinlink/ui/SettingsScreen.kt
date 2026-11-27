@@ -425,6 +425,13 @@ class SettingsScreen(private val host: MainActivity) {
             append("PinLink ").append(buildVersionName()).append('\n')
             append("sync: ").append(if (Sync.isDemo) "demo" else "live").append('\n')
             append("room: ").append(PinSession.roomCode).append(" onServer=").append(PinSession.roomOnServer).append('\n')
+            // 위치 경로 (v1.0.11) — 기지국 값이 840m 튈 때 이 세 줄로 원인이 보인다
+            append("location: ").append(PinSession.fixAgeSeconds).append("s ")
+                .append(PinSession.lastFixProvider.ifBlank { "-" }).append(' ')
+                .append(if (PinSession.lastFixAccuracy > 0.0) "±${PinSession.lastFixAccuracy.roundToInt()}m" else "±-")
+                .append('\n')
+            append("fused: ").append(if (PinSession.fusedActive) "on" else PinSession.fusedNote.ifBlank { "off" }).append('\n')
+            PinSession.coarseDropNote.takeIf { it.isNotEmpty() }?.let { append("coarse ").append(it).append('\n') }
             PinSession.lastFault?.let { append("last: ").append(PinSession.lastFaultAt).append(" · ").append(it.logText).append('\n') }
             append("--- log ---\n")
             append(SyncLog.dump())

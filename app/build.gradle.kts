@@ -43,8 +43,8 @@ android {
         applicationId = "com.youngsu.pinlink"
         minSdk = 26
         targetSdk = 36
-        versionCode = 11
-        versionName = "1.0.10"
+        versionCode = 12
+        versionName = "1.0.11"
 
         buildConfigField("String", "FIREBASE_PROJECT_ID", "\"$firebaseProjectId\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"$firebaseApiKey\"")
@@ -137,6 +137,10 @@ dependencies {
     implementation(libs.androidx.activity.ktx)
 
     implementation(libs.play.services.ads)
+    // v1.0.11 — Google Play Services 정밀 융합 위치(FusedLocationProviderClient).
+    // 기지국(NETWORK_PROVIDER)만 남았을 때 수백m~1km 튀던 핀이 카카오맵처럼 Wi-Fi+GPS+기지국을
+    // 함께 쓰는 융합 위치로 따라오게 한다. Play Services 가 없는 기기에서는 기존 LocationManager 로 돌아간다.
+    implementation(libs.play.services.location)
     // play-services-ads 가 요구하는 ListenableFuture (오프라인 캐시에 있는 버전으로 고정)
     implementation(libs.guava)
 }
