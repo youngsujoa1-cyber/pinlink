@@ -537,5 +537,5 @@ APK `downloads/pinlink.apk` — `aapt2 dump badging` versionCode **9** / **1.0.8
 
 - JVM **394 PASS** (위치 수신 18개 — 살아 있음/재시도 간격/늦은 측정 거르기, 핀 색 28개) · 지도 JS **42개**(핀 이동·아이콘 재생성 금지·stale 클래스 포함) · Robolectric **32개**(`MapFollowTest` 4개: 새 측정이 지도까지 도달·옛 측정 무시·멤버 이동 시 JSON 갱신·갱신 후 상태 일치) · `lintDebug` error 0 / warning 52 · `assembleDebug` · `bundleRelease` 통과.
 - 실서버 검사 **33/33** (22:34). 검사 방 `rooms/CHECK5`·채팅 `rooms/CHAT01/messages` 는 규칙상 앱에서 지울 수 없어 남습니다.
-- APK `downloads/pinlink.apk` — versionCode **11** / **1.0.10**, 11,387,535 B (sha256 `21dce5b7…`), debug 서명.
-  AAB `downloads/pinlink-release.aab` — 6,479,545 B (sha256 `8153249b…`), Play 업로드 키(`CN=Topster, O=Topster, C=KR`) 서명.
+- APK `downloads/pinlink.apk` — versionCode **11** / **1.0.10**, 11,387,560 B (sha256 `07f1a6d5…`), debug 서명.
+  AAB `downloads/pinlink-release.aab` — 6,479,590 B (sha256 `a3181e0a…`), Play 업로드 키(`CN=Topster, O=Topster, C=KR`) 서명.

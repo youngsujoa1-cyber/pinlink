@@ -717,7 +717,11 @@ object PinSession {
         val accuracy = if (location.hasAccuracy()) location.accuracy.toDouble() else 0.0
         val previous = myFix
         // 늦게 도착한 옛 측정·아주 부정확한 측정은 버린다 — 핀이 뒤로 튀지 않게 (v1.0.10)
-        if (!PinLogic.betterFix(previous?.at ?: 0L, previous?.accuracyMeters ?: 0.0, at, accuracy)) return
+        if (!PinLogic.betterFix(previous?.at ?: 0L, previous?.accuracyMeters ?: 0.0, at, accuracy)) {
+            // 단, 지금 값이 이미 오래됐다면(기기 시계가 뒤로 간 경우 포함) 새 값을 받아들인다 —
+            // 그렇지 않으면 시계가 한 번 어긋난 뒤로 모든 측정이 거부되어 핀이 영영 멈춘다
+            if (PinLogic.fixFresh(previous?.at ?: 0L, System.currentTimeMillis())) return
+        }
         val rawSpeedMps = if (location.hasSpeed()) location.speed.toDouble() else null
         val fix = Fix(
             lat = location.latitude,
