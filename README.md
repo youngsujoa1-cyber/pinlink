@@ -186,7 +186,7 @@ app/src/main/java/com/youngsu/pinlink/
 
 ## 검증한 것 / 못 한 것
 
-- `./gradlew lintDebug` 통과 (v1.0.11: error 0 · warning 52 — 그중 42건은 "더 새 라이브러리/AGP 가 있다"는 GradleDependency·AndroidGradlePluginVersion 알림) · `assembleDebug` · `bundleRelease`
+- `./gradlew lintDebug` 통과 (v1.0.11: error 0 · warning 55 — 그중 42건은 "더 새 라이브러리/AGP 가 있다"는 GradleDependency·AndroidGradlePluginVersion 알림) · `assembleDebug` · `bundleRelease`
 - `bash tools/logic-check/run.sh` — v1.0.11 **422 PASS / 0 FAIL** (정확도 필터 28개: 기지국 150m 경계·첫 위치 예외·2분 창 경계·정확도 모름·늦은 측정·마지막 위치 선택)
 - `bash tools/server-check/run.sh` — v1.0.11 실서버 **33/33 통과**
 - `python3 tools/map-js-check/check.py` — v1.0.11 **42개 통과** · `bash tools/ui-smoke/run.sh` — v1.0.11 **33개 통과**
@@ -533,13 +533,14 @@ v1.0.10 은 `LocationManager` 의 융합(안드로이드 12+) · GPS · 기지�
 | 진단 | 마지막 측정 제공자·정확도 | + **`fused` 상태(`on`/`gms:2`/`fail:…`)·등록 제공자에 `fused(gms)`·버린 기지국 측정 횟수/정확도**(복사용 진단에 `coarse` 줄) |
 | 의존성 | `play-services-ads` 23.5.0 | + `com.google.android.gms:play-services-location` **21.0.1** (21.4.0 은 Kotlin 2.3 메타데이터라 Kotlin 2.0.21 프로젝트에서 컴파일 불가 — `incompatible version of Kotlin` 오류로 확인) |
 
-### 3. 검증 (v1.0.11, 2026-11-28 05:06)
+### 3. 검증 (v1.0.11, 2026-11-28 05:27)
 
 - `bash tools/logic-check/run.sh` — **422 PASS / 0 FAIL** (v1.0.10 394 + 정확도 필터 28개: 150m 경계·첫 위치 예외·2분 경계(119초/120초/121초)·정확도 모름·늦은 측정·마지막 위치 선택·`±840m` 표기)
 - `bash tools/ui-smoke/run.sh` — **33개 통과** (`MapFollowTest` 5개 — 새 검사 `coarseCellFixDoesNotDragPinAway`: GPS ±8m 뒤에 들어온 기지국 ±840m 를 **무시**하고 무시한 사실을 진단에 남김)
 - `python3 tools/map-js-check/check.py` — **42개 통과**
 - `bash tools/server-check/run.sh` — 실서버 **33/33 통과**
-- `./gradlew lintDebug` — **error 0** (warning 52, 모두 기존 항목 — 더 새 라이브러리 알림·API 레벨 안내) · `assembleDebug` · `bundleRelease` 통과
+- `./gradlew lintDebug` — **error 0 · warning 55** (모두 경고뿐: 더 새 라이브러리 알림·API 레벨 안내·미사용 리소스) · `assembleDebug` · `bundleRelease` 통과
+- `bash tools/ui-smoke/run.sh` 는 실서버에 붙어 도는 검사라 `InstantMeetingTest` 한 건이 네트워크 타이밍에 따라 한 번 실패했다(같은 코드로 다시 돌리면 33/33). 이번 변경과는 무관한 기존 검사의 흔들림이다
 - APK `downloads/pinlink.apk` — `aapt2 dump badging` versionCode **12** / **1.0.11**, 11,459,438 B (sha256 `e0af5d84…`), debug 서명(`CN=Android Debug`, `apksigner verify` 통과). AAB `downloads/pinlink-release.aab` — 6,532,459 B (sha256 `b4f59684…`), Play 업로드 키(`CN=Topster, O=Topster, C=KR`) 서명 · AdMob **실제 ID 3개만**(앱 ID·배너·전면) 포함, 테스트 ID 0건
 
 ### 4. 남은 것
