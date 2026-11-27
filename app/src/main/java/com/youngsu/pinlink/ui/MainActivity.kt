@@ -317,6 +317,8 @@ class MainActivity : AppCompatActivity() {
             updateChatBadge()
             // 방장이 나를 내보냈으면 한 번만 안내한다 (백그라운드에 있었다면 돌아왔을 때)
             if (PinSession.consumeKickedNotice()) showKickedNotice()
+            // 서버 일일 무료 한도(429) 안내 — 폴링마다 토스트가 뜨지 않게 PinSession 이 10분에 한 번만 내어 준다 (v1.0.9)
+            if (PinSession.consumeQuotaNotice()) toast(getString(R.string.toast_quota))
         }
     }
 
@@ -690,11 +692,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun faultLabel(fault: SyncFault): Int = when (fault.failure) {
+        // 429 는 "서버 고장"이 아니라 하루 무료 한도가 찬 것이다 — 바로 고칠 수 있는 안내로 (v1.0.9)
+        SyncFailure.SERVER -> if (fault.httpCode == 429) R.string.fault_quota else R.string.fault_server
         SyncFailure.OFFLINE -> R.string.fault_offline
         SyncFailure.DENIED -> R.string.fault_denied
         SyncFailure.MISSING -> R.string.fault_missing
         SyncFailure.BAD_REQUEST -> R.string.fault_bad
-        SyncFailure.SERVER -> R.string.fault_server
         SyncFailure.UNKNOWN -> R.string.fault_unknown
     }
 

@@ -169,11 +169,13 @@
     <string name="speed_idle">Stopped</string>
     <string name="err_meeting_save">Could not save the meeting point.</string>
     <string name="toast_room_restored">The room was missing on the server, so it has been recreated.</string>
+    <string name="toast_quota">Today\'s free server limit is used up. Please try again in a little while.</string>
     <string name="fault_offline">Check your internet connection.</string>
     <string name="fault_denied">The server refused the request (403).</string>
     <string name="fault_missing">The server has no such record (404).</string>
     <string name="fault_bad">The request was invalid (%1$d).</string>
     <string name="fault_server">The server had a problem (%1$d).</string>
+    <string name="fault_quota">Free daily server limit reached (%1$d).</string>
     <string name="fault_unknown">Unknown error (%1$d).</string>
     <string name="settings_diag">Sync diagnostics</string>
     <string name="settings_diag_ok">Server connection OK</string>

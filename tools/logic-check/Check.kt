@@ -63,6 +63,8 @@ fun main() {
     chatChecks()
     hostChecks()
     timingChecks()
+    uploadChecks()
+    quotaChecks()
     codecChecks()
     regionChecks()
 
@@ -592,36 +594,43 @@ fun hostChecks() {
     expect("strList wrong type", FirestoreCodec.strList(mapOf("kickedIds" to mapOf("stringValue" to "a")), "kickedIds"), emptyList<String>())
 }
 
-// ------------------------------------------------------- 폴링 주기 (v1.0.8)
+// ------------------------------------------------------- 폴링 주기 (v1.0.9)
 
 fun timingChecks() {
-    // 화면이 켜져 있을 때 — 1초 틱, 채팅 1.5초, 멤버·방 문서·내 위치 3초
+    // 화면이 켜져 있을 때 — 1초 틱, 채팅 2.5초, 멤버·방 문서 6초 (v1.0.9)
     val active = PinLogic.timing(uiVisible = true, chatVisible = true)
     expect("active tick", active.tickMs, 1_000L)
-    expect("active chat poll", active.chatMs, 1_500L)
-    expect("active member poll", active.memberMs, 3_000L)
-    expect("active room poll (v1.0.7 은 30초)", active.roomMs, 3_000L)
-    expect("active upload", active.uploadMs, 3_000L)
-    expect("active room idle check", active.roomIdleMs, 3_000L)
+    expect("active chat poll (v1.0.8 은 1.5초)", active.chatMs, 2_500L)
+    expect("active member poll (v1.0.8 은 3초)", active.memberMs, 6_000L)
+    expect("active room poll (v1.0.8 은 3초)", active.roomMs, 6_000L)
+    expect("active upload gap (v1.0.8 은 3초)", active.uploadMs, 30_000L)
+    expect("active upload move", active.uploadMeters, 5.0)
+    expect("active room idle check", active.roomIdleMs, 6_000L)
 
-    // 화면은 켜져 있지만 채팅은 접어 둔 상태 — 배지만 5초마다
+    // 화면은 켜져 있지만 채팅은 접어 둔 상태 — 배지만 8초마다
     val foregroundNoChat = PinLogic.timing(uiVisible = true, chatVisible = false)
     expect("foreground no chat tick", foregroundNoChat.tickMs, 1_000L)
-    expect("foreground no chat poll", foregroundNoChat.chatMs, 5_000L)
-    expect("foreground no chat keeps member poll", foregroundNoChat.memberMs, 3_000L)
+    expect("foreground no chat poll (v1.0.8 은 5초)", foregroundNoChat.chatMs, 8_000L)
+    expect("foreground no chat keeps member poll", foregroundNoChat.memberMs, 6_000L)
 
-    // 화면이 꺼져 있을 때 — v1.0.7 과 같은 배터리 절약 값
+    // 화면이 꺼져 있을 때 — 사용자가 지도를 보고 있지 않으므로 크게 줄인다
     val idle = PinLogic.timing(uiVisible = false, chatVisible = true)
-    expect("idle tick", idle.tickMs, 5_000L)
-    expect("idle chat poll (v1.0.6 과 같음)", idle.chatMs, 20_000L)
-    expect("idle member poll (v1.0.7 과 같음)", idle.memberMs, 8_000L)
-    expect("idle room poll (v1.0.7 과 같음)", idle.roomMs, 24_000L)
-    expect("idle upload", idle.uploadMs, 8_000L)
-    expect("idle room idle check", idle.roomIdleMs, 20_000L)
+    expect("idle tick (v1.0.8 은 5초)", idle.tickMs, 10_000L)
+    expect("idle chat poll (v1.0.8 은 20초)", idle.chatMs, 60_000L)
+    expect("idle member poll (v1.0.8 은 8초)", idle.memberMs, 60_000L)
+    expect("idle room poll (v1.0.8 은 24초)", idle.roomMs, 30_000L)
+    expect("idle upload gap (v1.0.8 은 8초)", idle.uploadMs, 45_000L)
+    expect("idle upload move", idle.uploadMeters, 15.0)
+    expect("idle room idle check", idle.roomIdleMs, 30_000L)
 
     // 채팅을 보고 있을 때가 접어 둔 때보다 느리지 않다
     expectTrue("chat visible is faster", active.chatMs <= foregroundNoChat.chatMs)
     expectTrue("idle is slower than active", idle.tickMs > active.tickMs && idle.memberMs > active.memberMs)
+    // v1.0.9 의 핵심 — 화면이 꺼지면 읽기·쓰기 주기가 분 단위로 늘어난다
+    expectTrue("idle chat is a minute away", idle.chatMs >= 45_000L)
+    expectTrue("idle members are a minute away", idle.memberMs >= 45_000L)
+    expectTrue("idle room check is 30s", idle.roomMs in 30_000L..60_000L)
+    expectTrue("idle upload moves less often", idle.uploadMeters > active.uploadMeters && idle.uploadMs > active.uploadMs)
 
     // 지금 돌 때인가 — 마지막에 한 적이 없으면(0) 바로, 주기를 넘겼으면 바로
     expect("due never done", PinLogic.isDue(0L, 10_000L, 1_500L), true)
@@ -641,4 +650,71 @@ fun timingChecks() {
     expect("meeting saving wins when server already caught up", PinLogic.meetingAfterRefresh(true, picked, picked), picked)
     // 지우는 중에는 옛 깃발이 다시 살아나지 않아야 한다
     expect("meeting clearing ignores old server value", PinLogic.meetingAfterRefresh(true, null, old), null)
+}
+
+// ---------------------------------------------- 위치 업로드 조건 (v1.0.9)
+
+fun uploadChecks() {
+    val t0 = 1_700_000_000_000L
+    val home = Fix(37.5665, 126.9780, at = t0)
+    // 위도 0.00001도 ≈ 1.11m — 5m 는 약 0.000045도
+    val near = Fix(37.56652, 126.9780, at = t0 + 3_000)      // 약 2.2m — 정지로 본다
+    val moved5 = Fix(37.56660, 126.9780, at = t0 + 3_000)    // 약 11m — 5m 넘음
+    val moved12 = Fix(37.56661, 126.9780, at = t0 + 3_000)   // 약 12m — 15m 미만
+    val moved17 = Fix(37.56665, 126.9780, at = t0 + 3_000)   // 약 17m — 15m 넘음
+
+    // 아직 한 번도 올리지 않았으면(방 입장 직후) 바로 올린다
+    expect("never uploaded uploads now", PinLogic.shouldUpload(0L, 0.0, 0.0, false, home, t0, 5.0, 30_000L), true)
+    expect("no fix does not upload", PinLogic.shouldUpload(0L, 0.0, 0.0, false, null, t0, 5.0, 30_000L), false)
+    expect("invalid fix does not upload", PinLogic.shouldUpload(0L, 0.0, 0.0, false, Fix(0.0, 0.0), t0, 5.0, 30_000L), false)
+
+    // 화면 켜짐 — 5m 미만 + 30초 미만이면 보내지 않는다 (v1.0.8 은 3초마다 같은 좌표를 덮어썼다)
+    expect("same spot at 3s is skipped", PinLogic.shouldUpload(t0, home.lat, home.lng, true, home, t0 + 3_000, 5.0, 30_000L), false)
+    expect("2m at 3s is skipped", PinLogic.shouldUpload(t0, home.lat, home.lng, true, near, t0 + 3_000, 5.0, 30_000L), false)
+    expect("11m at 3s uploads", PinLogic.shouldUpload(t0, home.lat, home.lng, true, moved5, t0 + 3_000, 5.0, 30_000L), true)
+    // 화면 켜짐 — 가만히 있어도 30초가 지나면 한 번은 올린다(심장 박동)
+    expect("same spot at 29s is skipped", PinLogic.shouldUpload(t0, home.lat, home.lng, true, home, t0 + 29_000, 5.0, 30_000L), false)
+    expect("same spot at 30s uploads", PinLogic.shouldUpload(t0, home.lat, home.lng, true, home, t0 + 30_000, 5.0, 30_000L), true)
+
+    // 화면 꺼짐 — 12m 로는 올리지 않고 15m 부터, 시간은 45초
+    expect("12m in idle is skipped", PinLogic.shouldUpload(t0, home.lat, home.lng, true, moved12, t0 + 40_000, 15.0, 45_000L), false)
+    expect("17m in idle uploads", PinLogic.shouldUpload(t0, home.lat, home.lng, true, moved17, t0 + 3_000, 15.0, 45_000L), true)
+    expect("11m in active uploads", PinLogic.shouldUpload(t0, home.lat, home.lng, true, moved5, t0 + 3_000, 5.0, 30_000L), true)
+    expect("idle 44s is skipped", PinLogic.shouldUpload(t0, home.lat, home.lng, true, home, t0 + 44_000, 15.0, 45_000L), false)
+    expect("idle 45s uploads", PinLogic.shouldUpload(t0, home.lat, home.lng, true, home, t0 + 45_000, 15.0, 45_000L), true)
+
+    // 기기 시계가 뒤로 가도 한 번은 올려 본다
+    expect("clock moved back uploads", PinLogic.shouldUpload(t0, home.lat, home.lng, true, home, t0 - 5_000, 5.0, 30_000L), true)
+
+    // 하루 절약 계산: 화면 켜짐 1시간 동안 3초 주기(1,200회) → 30초+5m 조건(가만히 있으면 120회)
+    val before = 3_600 / 3
+    val after = 3_600 / 30
+    expectTrue("upload writes drop 10x when still", after * 10 == before)
+}
+
+// ------------------------------------------------- 서버 한도 쿨다운 (v1.0.9)
+
+fun quotaChecks() {
+    val t0 = 1_700_000_000_000L
+    // 처음 429 — 30초
+    expect("first 429 cooldown", PinLogic.quotaCooldownMs(0L, t0), 30_000L)
+    // 10분 안에 또 걸리면 60초
+    expect("repeat 429 cooldown", PinLogic.quotaCooldownMs(t0, t0 + 60_000), 60_000L)
+    // 10분이 지난 뒤의 429 는 다시 30초
+    expect("429 after long gap", PinLogic.quotaCooldownMs(t0, t0 + 11 * 60_000L), 30_000L)
+
+    expect("cooling right after 429", PinLogic.inQuotaCooldown(t0, 30_000L, t0 + 1), true)
+    expect("cooling at 29s", PinLogic.inQuotaCooldown(t0, 30_000L, t0 + 29_000), true)
+    expect("cooled at 30s", PinLogic.inQuotaCooldown(t0, 30_000L, t0 + 30_000), false)
+    expect("never hit is not cooling", PinLogic.inQuotaCooldown(0L, 0L, t0), false)
+    expect("cooldown 0 is not cooling", PinLogic.inQuotaCooldown(t0, 0L, t0 + 1), false)
+
+    expect("remaining at 10s", PinLogic.quotaRemainingMs(t0, 30_000L, t0 + 10_000), 20_000L)
+    expect("remaining at end", PinLogic.quotaRemainingMs(t0, 30_000L, t0 + 30_000), 0L)
+
+    // 안내는 10분에 한 번만 — 폴링(2.5초)마다 토스트가 뜨지 않게
+    expect("notice never shown", PinLogic.quotaNoticeDue(0L, t0), true)
+    expect("notice again after 1 min", PinLogic.quotaNoticeDue(t0, t0 + 60_000), false)
+    expect("notice after 10 min", PinLogic.quotaNoticeDue(t0, t0 + 10 * 60_000L), true)
+    expect("notice after clock moved back", PinLogic.quotaNoticeDue(t0, t0 - 1_000), true)
 }

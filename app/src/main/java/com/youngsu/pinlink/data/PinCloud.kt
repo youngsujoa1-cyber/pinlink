@@ -150,10 +150,23 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
 
     /**
      * 통신 스레드 (v1.0.8: 3 → 6).
-     * 화면이 켜져 있을 때 멤버(3초)·방 문서(3초)·내 위치(3초)·채팅(1.5초)이 함께 돌기 때문에,
+     * 화면이 켜져 있을 때 멤버(6초)·방 문서(6초)·채팅(2.5초)·내 위치(움직일 때)가 함께 돌기 때문에,
      * 3개로는 느린 요청 하나가 뒤의 요청을 줄 세워 체감 지연이 커진다.
      */
     private val pool = Executors.newFixedThreadPool(6)
+
+    /**
+     * 429(일일 무료 사용량 초과) 를 받은 뒤 이 시각까지는 **서버로 요청을 보내지 않는다** (v1.0.9).
+     *
+     * v1.0.8 은 429 를 받아도 다음 폴링이 1~3초 뒤에 그대로 다시 나갔다 —
+     * 한도가 바닥난 서버에 초당 요청을 계속 보내며 로그·전력만 썼다.
+     * 이제는 쉬는 동안 요청을 만들지 않고 그 자리에서 같은 429 로 돌려준다(화면·진단 문구는 그대로).
+     */
+    @Volatile private var quotaAt = 0L
+    @Volatile private var quotaUntil = 0L
+
+    /** 쉬는 동안 생략한 요청 수 — 로그는 첫 번째 것만 남긴다 */
+    @Volatile private var quotaSkips = 0
 
     /**
      * 이번 실행에서 서버에 있다고 확인한 방 (v1.0.8).
@@ -388,6 +401,13 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
     private fun call(tag: String, url: String, method: String, body: String?): Reply? {
         val started = System.currentTimeMillis()
         val path = url.substringAfter("/documents/").substringBefore("?")
+        // 429 쿨다운 — 서버에 닿지도 않고 같은 답을 돌려준다 (v1.0.9)
+        if (started < quotaUntil) {
+            if (quotaSkips++ == 0) {
+                SyncLog.record("quota", "쿨다운 중 — 요청 생략 (${(quotaUntil - started) / 1000}초 남음)")
+            }
+            return Reply(429, QUOTA_BODY)
+        }
         var conn: HttpURLConnection? = null
         return try {
             conn = (URL(url).openConnection() as HttpURLConnection).apply {
@@ -406,6 +426,15 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
                 conn.outputStream.use { it.write(bytes) }
             }
             val code = conn.responseCode
+            if (code == 429) {
+                // 쿨다운을 세션에 걸어 둔다 — 다음 폴링이 바로 재시도하지 않게 (v1.0.9)
+                val hitAt = System.currentTimeMillis()
+                val cooldown = PinLogic.quotaCooldownMs(quotaAt, hitAt)
+                quotaAt = hitAt
+                quotaUntil = hitAt + cooldown
+                quotaSkips = 0
+                SyncLog.record("quota", "429 → ${cooldown / 1000}초 쿨다운")
+            }
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream
             val text = stream?.let {
                 BufferedReader(InputStreamReader(it, StandardCharsets.UTF_8)).use { r -> r.readText() }
@@ -503,6 +532,10 @@ class CloudEngine(private val projectId: String, private val apiKey: String) : S
          */
         private const val CONNECT_TIMEOUT_MS = 6_000
         private const val READ_TIMEOUT_MS = 8_000
+
+        /** 쿨다운 중 요청에 그대로 돌려주는 답 — 서버가 준 429 와 같은 모양으로 읽한다 */
+        private const val QUOTA_BODY =
+            "{\"error\":{\"code\":429,\"status\":\"RESOURCE_EXHAUSTED\",\"message\":\"daily quota cooldown\"}}"
     }
 }
 

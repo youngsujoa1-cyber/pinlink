@@ -157,11 +157,13 @@
     <string name="speed_idle">静止</string>
     <string name="err_meeting_save">无法保存集合地点。</string>
     <string name="toast_room_restored">服务器上没有该房间信息，已重新创建。</string>
+    <string name="toast_quota">今天的免费服务器额度已用完，请稍后再试。</string>
     <string name="fault_offline">请检查网络连接。</string>
     <string name="fault_denied">服务器拒绝了请求（权限 403）。</string>
     <string name="fault_missing">服务器上没有该信息（404）。</string>
     <string name="fault_bad">请求有误（%1$d）。</string>
     <string name="fault_server">服务器出现问题（%1$d）。</string>
+    <string name="fault_quota">服务器今日免费额度已用完（%1$d）。</string>
     <string name="fault_unknown">未知错误（%1$d）。</string>
     <string name="settings_diag">同步诊断</string>
     <string name="settings_diag_ok">服务器连接正常</string>

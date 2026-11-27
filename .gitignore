@@ -30,3 +30,4 @@ build/
 work/
 tools/logic-check/out/
 tools/ui-smoke/build/
+hs_err_pid*.log

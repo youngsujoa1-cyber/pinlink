@@ -27,8 +27,11 @@ import java.util.concurrent.CopyOnWriteArrayList
  *
  * 화면(MainActivity)과 포그라운드 서비스(ShareService)가 같은 객체를 본다.
  *  - 서비스가 살아 있는 동안 또는 화면이 보이는 동안만 위치를 요청한다.
- *  - 화면이 켜져 있을 때는 1초 틱으로 채팅(1.5초)·멤버 위치(3초)·방 문서(3초)·내 위치(3초)를,
- *    꺼져 있으면 배터리를 아껴 5초 틱으로 채팅(20초)·위치(8초)·방 문서(24초)를 확인한다(v1.0.8).
+ *  - 화면이 켜져 있을 때는 1초 틱으로 채팅(2.5초)·멤버 위치(6초)·방 문서(6초)를 확인하고,
+ *    내 위치는 **5m 이상 움직였거나 30초가 지났을 때만** 올린다.
+ *    꺼져 있으면 10초 틱으로 채팅·멤버(60초)·방 문서(30초)만 확인하고 위치는 15m/45초에 한 번 올린다.
+ *    (v1.0.9 — 무료 한도(하루 읽기 5만·쓰기 2만)가 여러 대를 켜 두자 하루 만에 차서 요청을 줄였다)
+ *  - 429(일일 무료 사용량 초과)를 받으면 30~60초 쉬었다가 다시 보낸다(안내는 10분에 한 번).
  *  - 고른 시간이 끝나면 스스로 멈춘다(알림·핀도 함께 사라진다).
  */
 object PinSession {
@@ -135,8 +138,24 @@ object PinSession {
         private set
 
     @Volatile private var lastUploadAt = 0L
+
+    /** 마지막으로 서버에 올린 좌표 — 여기서 [PinLogic.UPLOAD_MOVE_ACTIVE_M]m 넘게 움직여야 다시 올린다 */
+    @Volatile private var lastUploadLat = 0.0
+    @Volatile private var lastUploadLng = 0.0
+
+    /** 이번 세션(방)에서 한 번이라도 올렸는가 — 방에 들어온 첫 핀은 바로 올린다 */
+    @Volatile private var uploadedBefore = false
+
     @Volatile private var lastPollAt = 0L
     @Volatile private var lastRoomAt = 0L
+
+    /** 마지막 429(일일 무료 사용량 초과) 시각과 그때 정한 쿨다운 — 그동안 서버 요청을 쉰다 (v1.0.9) */
+    @Volatile private var quotaAt = 0L
+    @Volatile private var quotaCooldownMs = 0L
+
+    /** 한도 안내를 마지막으로 띄운 시각 — 같은 안내가 폴링마다 뜨지 않게 (v1.0.9) */
+    @Volatile private var quotaNoticeAt = 0L
+    @Volatile private var quotaNotice = false
     @Volatile private var reportedHidden = false
     @Volatile private var serviceRunning = false
     @Volatile private var uiVisible = false
@@ -372,7 +391,35 @@ object PinSession {
     private fun noteFault(where: String, fault: SyncFault) {
         lastFault = fault
         lastFaultAt = where
+        val now = System.currentTimeMillis()
+        if (fault.httpCode == 429) {
+            // 이미 쉬는 중이면 시각을 다시 밀지 않는다 — 폴링이 몰려도 쿨다운이 계속 늘어나지 않게
+            val cooling = PinLogic.inQuotaCooldown(quotaAt, quotaCooldownMs, now)
+            if (!cooling) {
+                val cooldown = PinLogic.quotaCooldownMs(quotaAt, now)
+                quotaAt = now
+                quotaCooldownMs = cooldown
+                SyncLog.record("fail · $where", fault.logText)
+                SyncLog.record("quota", "${cooldown / 1000}초 동안 요청을 쉼")
+                if (PinLogic.quotaNoticeDue(quotaNoticeAt, now)) {
+                    quotaNoticeAt = now
+                    quotaNotice = true
+                }
+            }
+            return
+        }
         SyncLog.record("fail · $where", fault.logText)
+    }
+
+    /** 지금 서버가 429 로 막혀 쉬는 중인가 — 그동안에는 폴링을 보내지 않는다 (v1.0.9) */
+    val inQuotaCooldown: Boolean
+        get() = PinLogic.inQuotaCooldown(quotaAt, quotaCooldownMs, System.currentTimeMillis())
+
+    /** 한도 안내를 한 번만 가져간다 (화면이 띄운다) — 10분에 한 번만 참이 된다 */
+    fun consumeQuotaNotice(): Boolean {
+        val noticed = quotaNotice
+        quotaNotice = false
+        return noticed
     }
 
     private fun clearFault() {
@@ -390,6 +437,9 @@ object PinSession {
         prefs.roomCreatedAt = createdAt
         reportedHidden = false
         lastUploadAt = 0L
+        lastUploadLat = 0.0
+        lastUploadLng = 0.0
+        uploadedBefore = false
         lastPollAt = 0L
         messages = emptyList()
         topChatId = ""
@@ -438,6 +488,10 @@ object PinSession {
         stayAnchor = null
         previousFix = null
         roomOnServer = null
+        lastUploadAt = 0L
+        lastUploadLat = 0.0
+        lastUploadLng = 0.0
+        uploadedBefore = false
         prefs.clearRoom()
         applyLocation()
         notifyChanged()
@@ -651,9 +705,9 @@ object PinSession {
         }
         Sync.demoEngine?.anchor = fix
         if (previous == null || previous.at <= 0L) notifyChanged()
-        if (isSharingNow() && PinLogic.isDue(lastUploadAt, System.currentTimeMillis(), timing.uploadMs)) {
-            uploadMine(force = true)
-        }
+        // 위치 올리기 (v1.0.9) — 측정값이 올 때마다 덮어쓰지 않고, 5m 이상 움직였거나 30초(꺼짐 45초)가
+        // 지났을 때만 올린다. 쿨다운(429) 중에는 아예 보내지 않는다.
+        if (isSharingNow() && !inQuotaCooldown) uploadMine()
     }
 
     private fun movingFrom(previous: Fix?, current: Fix): Boolean {
@@ -680,10 +734,33 @@ object PinSession {
         )
     }
 
+    /**
+     * 내 위치를 서버에 올린다.
+     * [force] 는 공유 시작·숨김·방 입장 같은 **수동 즉시 전송**에만 쓴다 —
+     * 일반 폴링·GPS 측정은 [PinLogic.shouldUpload] 가 "5m 이상 움직였거나 30초 지났는가"를 보고 정한다(v1.0.9).
+     */
     private fun uploadMine(force: Boolean = false, hidden: Boolean = false) {
         if (roomCode.isEmpty()) return
+        val now = System.currentTimeMillis()
+        if (!force) {
+            val every = timing
+            if (!PinLogic.shouldUpload(
+                    lastUploadAt = lastUploadAt,
+                    lastLat = lastUploadLat,
+                    lastLng = lastUploadLng,
+                    uploadedBefore = uploadedBefore,
+                    fix = myFix,
+                    now = now,
+                    uploadMeters = every.uploadMeters,
+                    maxGapMs = every.uploadMs
+                )
+            ) return
+        }
         val member = myMember(hidden) ?: return
-        lastUploadAt = System.currentTimeMillis()
+        lastUploadAt = now
+        lastUploadLat = member.lat
+        lastUploadLng = member.lng
+        uploadedBefore = true
         engine.upload(roomCode, member) { fault ->
             if (fault != null && !demo) {
                 noteFault("member-upload", fault)
@@ -974,8 +1051,8 @@ object PinSession {
     // --------------------------------------------------------------------- 주기
 
     /**
-     * 타이머 — 화면이 켜져 있으면 1초, 꺼져 있으면 5초마다 깨어나 각 폴링이 자기 주기를 넘겼는지 본다.
-     * (v1.0.8) v1.0.7 까지는 틱이 5초 고정이라 3초 채팅·8초 위치·24초 방 문서가 모두 5초의 배수로만 돌았다.
+     * 타이머 — 화면이 켜져 있으면 1초, 꺼져 있으면 10초마다 깨어나 각 폴링이 자기 주기를 넘겼는지 본다.
+     * (v1.0.9) 429 쿨다운 중에는 폴링을 보내지 않는다 — 한도가 바닥난 서버에 요청을 반복하지 않는다.
      */
     private val ticker = object : Runnable {
         override fun run() {
@@ -1007,10 +1084,15 @@ object PinSession {
             expireSharing()
             return
         }
+        // 429 쿨다운 — 서버 요청을 쉬고 화면만 그린다 (v1.0.9)
+        if (PinLogic.inQuotaCooldown(quotaAt, quotaCooldownMs, now)) {
+            notifyChanged()
+            return
+        }
         if (isSharingNow()) {
             if (PinLogic.isDue(lastUploadAt, now, every.uploadMs)) uploadMine()
             if (PinLogic.isDue(lastPollAt, now, every.memberMs)) refreshMembers()
-            // 약속 장소·방장 내보내기 — 화면이 켜져 있을 때 3초마다 (v1.0.7 은 30초)
+            // 약속 장소·방장 내보내기 — 화면이 켜져 있을 때 6초, 꺼져 있으면 30초 (v1.0.9)
             if (PinLogic.isDue(lastRoomAt, now, every.roomMs)) refreshRoom()
         } else if (PinLogic.isDue(lastRoomAt, now, every.roomIdleMs)) {
             // 위치를 숨겨 둔 동안에도 방 문서를 가끔 확인한다 —

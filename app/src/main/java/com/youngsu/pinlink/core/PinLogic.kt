@@ -412,14 +412,17 @@ object PinLogic {
     fun kickedOut(kicked: List<String>, deviceId: String): Boolean =
         deviceId.isNotBlank() && kicked.any { it == deviceId }
 
-    // ------------------------------------------------------------ 주기 (v1.0.8)
+    // ------------------------------------------------------------ 주기 (v1.0.9)
 
     /**
-     * 폴링 주기 묶음 (v1.0.8).
+     * 폴링 주기 묶음 (v1.0.9).
      *
      * v1.0.7 까지는 틱이 5초 고정이라 채팅(3초)·멤버(8초)·방 문서(24초)가 모두 5초의 배수로만 돌았고,
      * 약속 장소는 최대 30초에 한 번만 갱신됐다(사용자 제보: "글을 쓰거나 위치 지정 같은 거 하면 딜레이가 너무 돼").
-     * 이제 화면이 켜져 있으면 1초 틱으로 각 주기를 따로 지키고, 화면이 꺼져 있으면 배터리를 아낀다.
+     * v1.0.8 은 그래서 1초 틱·채팅 1.5초·멤버 3초로 당겼지만, 여러 대를 켜 두자 Firebase 무료 한도
+     * (Spark: 하루 읽기 5만·쓰기 2만)가 하루 만에 찼다(`429 RESOURCE_EXHAUSTED`).
+     * v1.0.9 는 화면을 보고 있을 때의 반응 속도는 그대로 두고, **가만히 있을 때와 화면이 꺼졌을 때**
+     * 나가는 요청을 크게 줄인다 — 위치 올리기는 이동·경과 조건을 만족할 때만, 화면이 꺼지면 읽기는 분 단위로.
      */
     data class PollTiming(
         /** 타이머가 도는 간격 — 각 폴링은 자기 주기를 넘겼을 때만 나간다 */
@@ -432,36 +435,46 @@ object PinLogic {
         val roomMs: Long,
         /** 위치를 숨겨 둔 동안 방 문서를 확인하는 주기 */
         val roomIdleMs: Long,
-        /** 내 위치 올리기 주기 */
-        val uploadMs: Long
+        /** 내 위치 올리기 — 좌표가 같아도 이만큼 지나면 한 번은 올린다(심장 박동) */
+        val uploadMs: Long,
+        /** 내 위치 올리기 — 이만큼 움직였으면 주기를 기다리지 않고 올린다 */
+        val uploadMeters: Double
     )
 
     /** 화면이 켜져 있을 때의 틱 — 1초마다 깨어나 각 주기를 지킨다 */
     const val TICK_ACTIVE_MS = 1_000L
 
-    /** 화면이 꺼져 있을 때의 틱 — v1.0.7 과 같은 5초 */
-    const val TICK_IDLE_MS = 5_000L
+    /** 화면이 꺼져 있을 때의 틱 (v1.0.9: 5초 → 10초) — 깨어나는 횟수부터 줄인다 */
+    const val TICK_IDLE_MS = 10_000L
 
-    /** 채팅을 보고 있을 때 메시지 확인 주기 (1.5초) */
-    const val CHAT_POLL_ACTIVE_MS = 1_500L
+    /** 채팅을 보고 있을 때 메시지 확인 주기 (2.5초, v1.0.8 은 1.5초) */
+    const val CHAT_POLL_ACTIVE_MS = 2_500L
 
-    /** 화면은 켜져 있지만 채팅은 접어 둔 상태 — 읽지 않음 배지만 갱신 (5초) */
-    const val CHAT_POLL_FOREGROUND_MS = 5_000L
+    /** 화면은 켜져 있지만 채팅은 접어 둔 상태 — 읽지 않음 배지만 갱신 (8초, v1.0.8 은 5초) */
+    const val CHAT_POLL_FOREGROUND_MS = 8_000L
 
-    /** 화면이 꺼져 있을 때 채팅 확인 주기 (20초, v1.0.6 과 같음) */
-    const val CHAT_POLL_IDLE_MS = 20_000L
+    /** 화면이 꺼져 있을 때 채팅 확인 주기 (60초 — 지도를 보고 있지 않다, v1.0.8 은 20초) */
+    const val CHAT_POLL_IDLE_MS = 60_000L
 
-    /** 화면이 켜져 있을 때 멤버 위치·방 문서 확인·내 위치 올리기 주기 (3초, v1.0.7 은 10초/30초) */
-    const val POLL_ACTIVE_MS = 3_000L
+    /** 화면이 켜져 있을 때 멤버 위치·방 문서 확인 주기 (6초, v1.0.8 은 3초) */
+    const val POLL_ACTIVE_MS = 6_000L
 
-    /** 화면이 꺼져 있을 때 멤버 위치·내 위치 올리기 주기 (8초, v1.0.7 과 같음) */
-    const val POLL_IDLE_MS = 8_000L
+    /** 화면이 꺼져 있을 때 멤버 위치 확인 주기 (60초, v1.0.8 은 8초) */
+    const val POLL_IDLE_MS = 60_000L
 
-    /** 화면이 꺼져 있을 때 방 문서 확인 주기 (24초 = 8초 × 3, v1.0.7 과 같음) */
-    const val ROOM_POLL_IDLE_MS = 24_000L
+    /** 화면이 꺼져 있을 때 방 문서(종료·내보내기) 확인 주기 (30초, v1.0.8 은 24초) */
+    const val ROOM_POLL_IDLE_MS = 30_000L
 
-    /** 화면이 꺼져 있고 위치를 숨겨 둔 동안에도 방장이 나를 내보냈는지 확인하는 주기 (20초, v1.0.7 과 같음) */
-    const val ROOM_IDLE_CHECK_MS = 20_000L
+    /** 화면이 꺼져 있고 위치를 숨겨 둔 동안에도 방장이 나를 내보냈는지 확인하는 주기 (30초) */
+    const val ROOM_IDLE_CHECK_MS = 30_000L
+
+    /** 화면이 켜져 있을 때 위치 올리기 — 5m 이상 움직였거나 30초가 지났을 때 */
+    const val UPLOAD_MOVE_ACTIVE_M = 5.0
+    const val UPLOAD_GAP_ACTIVE_MS = 30_000L
+
+    /** 화면이 꺼져 있을 때 위치 올리기 — 15m 이상 움직였거나 45초가 지났을 때 */
+    const val UPLOAD_MOVE_IDLE_M = 15.0
+    const val UPLOAD_GAP_IDLE_MS = 45_000L
 
     private val TIMING_ACTIVE = PollTiming(
         tickMs = TICK_ACTIVE_MS,
@@ -470,7 +483,8 @@ object PinLogic {
         roomMs = POLL_ACTIVE_MS,
         // 위치를 숨겨 둔 채로 지도를 보고 있어도 약속 장소는 바로 보여야 한다
         roomIdleMs = POLL_ACTIVE_MS,
-        uploadMs = POLL_ACTIVE_MS
+        uploadMs = UPLOAD_GAP_ACTIVE_MS,
+        uploadMeters = UPLOAD_MOVE_ACTIVE_M
     )
 
     /** 화면은 켜져 있지만 채팅은 접어 둔 상태 */
@@ -482,7 +496,8 @@ object PinLogic {
         memberMs = POLL_IDLE_MS,
         roomMs = ROOM_POLL_IDLE_MS,
         roomIdleMs = ROOM_IDLE_CHECK_MS,
-        uploadMs = POLL_IDLE_MS
+        uploadMs = UPLOAD_GAP_IDLE_MS,
+        uploadMeters = UPLOAD_MOVE_IDLE_M
     )
 
     /** 지금 상태의 폴링 주기 — 화면이 켜져 있을 때만 빠르게, 꺼져 있으면 배터리를 아낀다 */
@@ -498,6 +513,73 @@ object PinLogic {
      */
     fun isDue(lastAt: Long, now: Long, everyMs: Long): Boolean =
         lastAt <= 0L || now < lastAt || now - lastAt >= everyMs
+
+    /**
+     * 이번 측정값을 서버에 올릴까 (v1.0.9).
+     *
+     * v1.0.8 은 화면이 켜져 있는 동안 3초마다(화면 꺼짐 8초) 좌표를 그대로 덮어썼다 —
+     * 가만히 서 있어도 같은 값을 계속 쓰는 바람에 무료 쓰기 한도(하루 2만)가 금방 찼다.
+     * 이제는 다음일 때만 올린다.
+     *  - 방에 처음 들어왔거나 아직 한 번도 못 올렸을 때 (첫 핀이 바로 보여야 한다)
+     *  - 마지막으로 올린 좌표에서 [uploadMeters] 이상 움직였을 때 (지도에서 핀이 따라온다)
+     *  - 마지막 업로드에서 [maxGapMs] 이상 지났을 때 (심장 박동 — 멈춘 핀으로 보이지 않게)
+     *  - 기기 시계가 뒤로 갔을 때 (한 번은 올려 본다)
+     * 수동 즉시 전송(공유 시작·숨김·방 입장)은 부르는 쪽이 force 로 건너뛴다.
+     */
+    fun shouldUpload(
+        lastUploadAt: Long,
+        lastLat: Double,
+        lastLng: Double,
+        uploadedBefore: Boolean,
+        fix: Fix?,
+        now: Long,
+        uploadMeters: Double,
+        maxGapMs: Long
+    ): Boolean {
+        if (fix == null || !fix.valid) return false
+        if (!uploadedBefore || lastUploadAt <= 0L) return true
+        if (now < lastUploadAt) return true
+        val moved = distanceMeters(lastLat, lastLng, fix.lat, fix.lng)
+        if (moved >= uploadMeters) return true
+        return now - lastUploadAt >= maxGapMs
+    }
+
+    // ------------------------------------------------------- 서버 한도 (v1.0.9)
+
+    /** 429 를 처음 받았을 때 쉬는 시간 (30초) */
+    const val QUOTA_COOLDOWN_MS = 30_000L
+
+    /** 10분 안에 429 가 또 오면 더 길게 쉰다 (60초) — 한도가 바닥난 상태에서 요청을 반복하지 않게 */
+    const val QUOTA_COOLDOWN_LONG_MS = 60_000L
+
+    /** '또 걸렸다'로 보는 시간 창 (10분) */
+    const val QUOTA_REPEAT_WINDOW_MS = 10 * 60_000L
+
+    /** 같은 안내("서버 일일 무료 사용량이 찼습니다")를 다시 띄우기까지 (10분) */
+    const val QUOTA_NOTICE_GAP_MS = 10 * 60_000L
+
+    /**
+     * 429 를 받았을 때 몇 초 쉴지.
+     * 처음에는 30초, [QUOTA_REPEAT_WINDOW_MS] 안에 또 걸리면 60초 — 즉시 재시도 루프를 만들지 않는다.
+     */
+    fun quotaCooldownMs(previousQuotaAt: Long, now: Long): Long {
+        if (previousQuotaAt <= 0L) return QUOTA_COOLDOWN_MS
+        val delta = now - previousQuotaAt
+        return if (delta in 0 until QUOTA_REPEAT_WINDOW_MS) QUOTA_COOLDOWN_LONG_MS else QUOTA_COOLDOWN_MS
+    }
+
+    /** 지금 429 쿨다운 중인가 (그동안에는 서버 요청을 보내지 않는다) */
+    fun inQuotaCooldown(lastQuotaAt: Long, cooldownMs: Long, now: Long): Boolean =
+        lastQuotaAt > 0L && cooldownMs > 0L && now >= lastQuotaAt && now - lastQuotaAt < cooldownMs
+
+    /** 429 쿨다운이 끝나기까지 남은 시간(ms) — 0 이면 쉬는 중이 아니다 */
+    fun quotaRemainingMs(lastQuotaAt: Long, cooldownMs: Long, now: Long): Long =
+        if (!inQuotaCooldown(lastQuotaAt, cooldownMs, now)) 0L
+        else (lastQuotaAt + cooldownMs - now).coerceAtLeast(0L)
+
+    /** 사용자에게 한도 안내를 (다시) 보여 줄 때인가 — 폴링마다 토스트가 뜨지 않게 */
+    fun quotaNoticeDue(lastNoticeAt: Long, now: Long, gapMs: Long = QUOTA_NOTICE_GAP_MS): Boolean =
+        lastNoticeAt <= 0L || now < lastNoticeAt || now - lastNoticeAt >= gapMs
 
     /**
      * 방 문서를 새로 받았을 때 지도에 보여 줄 약속 장소 (v1.0.8).

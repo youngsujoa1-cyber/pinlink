@@ -157,11 +157,13 @@
     <string name="speed_idle">Detenido</string>
     <string name="err_meeting_save">No se pudo guardar el punto de encuentro.</string>
     <string name="toast_room_restored">La sala no existía en el servidor y se ha vuelto a crear.</string>
+    <string name="toast_quota">Se agotó el límite gratuito del servidor por hoy. Inténtalo de nuevo en un rato.</string>
     <string name="fault_offline">Revisa tu conexión a internet.</string>
     <string name="fault_denied">El servidor rechazó la solicitud (403).</string>
     <string name="fault_missing">El servidor no tiene ese registro (404).</string>
     <string name="fault_bad">La solicitud no es válida (%1$d).</string>
     <string name="fault_server">Hubo un problema en el servidor (%1$d).</string>
+    <string name="fault_quota">Se agotó el límite gratuito diario del servidor (%1$d).</string>
     <string name="fault_unknown">Error desconocido (%1$d).</string>
     <string name="settings_diag">Diagnóstico de sincronización</string>
     <string name="settings_diag_ok">Conexión con el servidor correcta</string>

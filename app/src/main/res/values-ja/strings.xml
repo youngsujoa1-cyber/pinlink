@@ -157,11 +157,13 @@
     <string name="speed_idle">停止</string>
     <string name="err_meeting_save">待ち合わせ場所を保存できませんでした。</string>
     <string name="toast_room_restored">サーバーに無かったルーム情報を作り直しました。</string>
+    <string name="toast_quota">本日のサーバー無料利用枠を使い切りました。しばらくしてからもう一度お試しください。</string>
     <string name="fault_offline">インターネット接続を確認してください。</string>
     <string name="fault_denied">サーバーがリクエストを拒否しました（権限 403）。</string>
     <string name="fault_missing">サーバーにその情報がありません（404）。</string>
     <string name="fault_bad">リクエストが正しくありません（%1$d）。</string>
     <string name="fault_server">サーバーに問題があります（%1$d）。</string>
+    <string name="fault_quota">サーバーの1日の無料利用枠を使い切りました（%1$d）。</string>
     <string name="fault_unknown">不明なエラーです（%1$d）。</string>
     <string name="settings_diag">同期の診断</string>
     <string name="settings_diag_ok">サーバー接続は正常</string>
