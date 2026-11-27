@@ -210,4 +210,9 @@
     <string name="chat_collapse">閉じる</string>
     <string name="chat_expand">開く</string>
     <string name="chat_open_full">全画面</string>
+    <string name="toast_location_refresh">現在地を取得し直しました</string>
+    <string name="settings_diag_gps">GPS 受信 %1$s · 提供元 %2$s · 精度 %3$s · 登録 %4$s</string>
+    <string name="settings_diag_gps_none">GPS 受信なし — まだ位置を取得できていません</string>
+    <string name="settings_diag_refresh">現在地を取得し直す</string>
+    <string name="settings_diag_refreshed">現在地を取得し直しました</string>
 </resources>

@@ -22,6 +22,6 @@ mkdir -p "$OUT"
 
 java -cp "$KJAR:$STDLIB:$COROUT:$TROVE:$ANNOT" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler \
   -no-stdlib -cp "$STDLIB" -d "$OUT" \
-  "$SRC/core/PinLogic.kt" "$SRC/map/MapStyle.kt" "$SRC/map/TileUrl.kt" "$SRC/map/MapRegion.kt" tools/logic-check/Check.kt
+  "$SRC/core/PinLogic.kt" "$SRC/core/PinColors.kt" "$SRC/map/MapStyle.kt" "$SRC/map/TileUrl.kt" "$SRC/map/MapRegion.kt" tools/logic-check/Check.kt
 
 java -cp "$OUT:$STDLIB" CheckKt

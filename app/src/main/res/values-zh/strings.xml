@@ -210,4 +210,9 @@
     <string name="chat_collapse">收起</string>
     <string name="chat_expand">展开</string>
     <string name="chat_open_full">全屏</string>
+    <string name="toast_location_refresh">已重新获取我的位置</string>
+    <string name="settings_diag_gps">GPS 接收 %1$s · 提供方 %2$s · 精度 %3$s · 已注册 %4$s</string>
+    <string name="settings_diag_gps_none">尚无 GPS 信号 — 还没有收到位置</string>
+    <string name="settings_diag_refresh">立即重新获取位置</string>
+    <string name="settings_diag_refreshed">已重新获取位置</string>
 </resources>

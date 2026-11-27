@@ -210,4 +210,9 @@
     <string name="chat_collapse">Contraer</string>
     <string name="chat_expand">Expandir</string>
     <string name="chat_open_full">Pantalla completa</string>
+    <string name="toast_location_refresh">Ubicación actualizada</string>
+    <string name="settings_diag_gps">GPS hace %1$s · proveedor %2$s · precisión %3$s · registrados %4$s</string>
+    <string name="settings_diag_gps_none">Sin señal GPS — aún no ha llegado la ubicación</string>
+    <string name="settings_diag_refresh">Obtener mi ubicación ahora</string>
+    <string name="settings_diag_refreshed">Ubicación actualizada</string>
 </resources>

@@ -412,6 +412,59 @@ object PinLogic {
     fun kickedOut(kicked: List<String>, deviceId: String): Boolean =
         deviceId.isNotBlank() && kicked.any { it == deviceId }
 
+    // ------------------------------------------------------- 위치 수신 (v1.0.10)
+
+    /**
+     * 연속 위치 추적이 살아 있는지 보는 기준 (v1.0.10).
+     *
+     * v1.0.9 까지는 위치 요청을 한 번 걸어 두고 그 뒤로는 아무것도 확인하지 않았다.
+     * GPS 칩이 측정을 멈추거나(터널·지하·실내), 등록이 조용히 실패하면 **다시 요청할 길이 없어**
+     * 파란 점과 상대방 핀이 마지막 좌표에 그대로 멈췄다(2026-11-27 실기기: "안 움직여").
+     * 이제는 마지막 측정이 [FIX_ALIVE_MS] 보다 오래되면 [FIX_RETRY_MS] 간격으로 한 번씩 다시 받는다.
+     */
+    const val FIX_ALIVE_MS = 20_000L
+
+    /** 살아 있는 측정이 없을 때 다시 요청하는 간격 */
+    const val FIX_RETRY_MS = 15_000L
+
+    /** 이보다 부정확한 측정은 '대략 위치' — 더 좋은 값이 오면 그쪽을 쓴다 */
+    const val FIX_COARSE_ACCURACY_M = 500.0
+
+    /** [at] 에 받은 측정이 아직 '살아 있는가' (기기 시계가 뒤로 간 경우도 살아 있는 것으로 본다) */
+    fun fixFresh(at: Long, now: Long, limitMs: Long = FIX_ALIVE_MS): Boolean =
+        at > 0L && (now < at || now - at <= limitMs)
+
+    /**
+     * 지금 한 번 강제로 위치를 다시 받아야 하는가.
+     *  - 살아 있는 측정이 없고
+     *  - 마지막 시도([lastAttemptAt])에서 [retryMs] 가 지났거나 아직 시도한 적이 없을 때
+     */
+    fun fixRetryDue(
+        lastAcceptedAt: Long,
+        lastAttemptAt: Long,
+        now: Long,
+        staleMs: Long = FIX_ALIVE_MS,
+        retryMs: Long = FIX_RETRY_MS
+    ): Boolean {
+        if (fixFresh(lastAcceptedAt, now, staleMs)) return false
+        if (lastAttemptAt <= 0L) return true
+        if (now < lastAttemptAt) return true
+        return now - lastAttemptAt >= retryMs
+    }
+
+    /**
+     * 새 측정값을 채택할까 — 시각이 더 최신이면 채택, 같은 시각이면 정확도가 좋은 쪽.
+     * (GPS·네트워크·융합 제공자가 함께 들어오므로 늦게 도착한 옛 값이 핀을 뒤로 되돌리지 않게 한다)
+     */
+    fun betterFix(oldAt: Long, oldAccuracy: Double, newAt: Long, newAccuracy: Double): Boolean {
+        if (oldAt <= 0L) return true
+        if (newAt > oldAt + 1_000L) return true
+        if (newAt < oldAt - 1_000L) return false
+        val oldAcc = if (oldAccuracy > 0.0) oldAccuracy else Double.MAX_VALUE
+        val newAcc = if (newAccuracy > 0.0) newAccuracy else Double.MAX_VALUE
+        return newAcc < oldAcc
+    }
+
     // ------------------------------------------------------------ 주기 (v1.0.9)
 
     /**

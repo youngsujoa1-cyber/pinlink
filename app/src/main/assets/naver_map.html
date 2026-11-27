@@ -29,40 +29,50 @@
   body.dark #map { filter: invert(1) hue-rotate(180deg); }
   body.dark .pinwrap, body.dark .mewrap, body.dark .flagwrap { filter: invert(1) hue-rotate(180deg); }
 
-  /* ── 멤버 핀: 아바타 색 원 + 이름 첫 글자, 점 아래 이름표 ── */
+  /* ── 멤버 핀: 아바타 색 원 + 이름 첫 글자, 점 아래 이름표 ──
+     v1.0.10 — 밝은 지도 위에서 연한 파스텔 핀이 거의 사라지던 문제를 고쳤다.
+     앱이 **채도를 올린 선명한 색**(core/PinColors)을 넘겨 주고, 여기서는
+     흰 3px 테두리 + 진한 그림자 + 글자 그림자로 밝은 지도·어두운 지도 어디서나 또렷하게 만든다.
+     투명도로 '오래된 핀'을 흐리게 하지 않는다(그러면 다시 안 보인다) — 대신 채도를 낮춘다. */
   .pinwrap { position: relative; width: 1px; height: 1px; }
   .pinwrap .bubble {
-    position: absolute; left: 0; bottom: 17px; margin-left: -17px;
-    width: 34px; height: 34px; box-sizing: border-box; border-radius: 50%;
-    background: var(--c, #E5C158); border: 2.2px solid #FFFFFF;
-    color: #FFFFFF; font-size: 15px; font-weight: 700; line-height: 29px; text-align: center;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
+    position: absolute; left: 0; bottom: 19px; margin-left: -19px;
+    width: 38px; height: 38px; box-sizing: border-box; border-radius: 50%;
+    background: var(--c, #F0A500); border: 3px solid #FFFFFF;
+    color: #FFFFFF; font-size: 17px; font-weight: 800; line-height: 32px; text-align: center;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .55), 0 0 1px rgba(0, 0, 0, .45);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, .45), 0 0 0 1px rgba(0, 0, 0, .16);
   }
   .pinwrap .tail {
-    position: absolute; left: 0; bottom: 0; margin-left: -7px;
+    position: absolute; left: 0; bottom: 0; margin-left: -7.5px;
     width: 0; height: 0;
-    border-left: 7px solid transparent;
-    border-right: 7px solid transparent;
-    border-top: 17px solid var(--c, #E5C158);
+    border-left: 7.5px solid transparent;
+    border-right: 7.5px solid transparent;
+    border-top: 19px solid var(--c, #F0A500);
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35));
   }
   .pinwrap.sel .bubble {
-    box-shadow: 0 0 0 4px rgba(255, 255, 255, .38), 0 2px 6px rgba(0, 0, 0, .45);
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, .70), 0 3px 12px rgba(0, 0, 0, .55), 0 0 0 1px rgba(0, 0, 0, .18);
+    transform: scale(1.06);
   }
+  /* 오래 갱신되지 않은 핀 — 투명도 대신 채도를 낮춰 '멈춘 핀'임을 알린다 */
+  .pinwrap.stale .bubble, .pinwrap.stale .tail { filter: saturate(.30) brightness(.82); }
 
   /* 점 아래 이름표 (멤버·약속 장소 공용) */
   .label {
     position: absolute; left: 0; top: 5px; transform: translateX(-50%);
     max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    background: rgba(11, 20, 32, .90); color: #EAF0FA;
-    font-size: 11px; line-height: 14px; padding: 3px 7px; border-radius: 999px;
-    border: 1px solid rgba(34, 49, 74, .55);
+    background: rgba(8, 15, 26, .94); color: #FFFFFF; font-weight: 700;
+    font-size: 11.5px; line-height: 15px; padding: 3px 8px; border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, .22);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .40);
   }
 
   /* ── 내 위치: 파란 점 + 옅은 물결 ── */
   .mewrap { position: relative; width: 1px; height: 1px; }
-  .mewrap .halo { position: absolute; left: -18px; top: -18px; width: 36px; height: 36px; border-radius: 50%; background: rgba(76, 141, 255, .22); }
-  .mewrap .ring { position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; border-radius: 50%; background: #FFFFFF; box-shadow: 0 1px 3px rgba(0, 0, 0, .30); }
-  .mewrap .dot { position: absolute; left: -6.5px; top: -6.5px; width: 13px; height: 13px; border-radius: 50%; background: #4C8DFF; }
+  .mewrap .halo { position: absolute; left: -20px; top: -20px; width: 40px; height: 40px; border-radius: 50%; background: rgba(37, 99, 235, .28); }
+  .mewrap .ring { position: absolute; left: -11px; top: -11px; width: 22px; height: 22px; border-radius: 50%; background: #FFFFFF; box-shadow: 0 2px 6px rgba(0, 0, 0, .40); }
+  .mewrap .dot { position: absolute; left: -7px; top: -7px; width: 14px; height: 14px; border-radius: 50%; background: #2563EB; }
 
   /* ── 약속 장소: 민트 깃발 ── */
   .flagwrap { position: relative; width: 1px; height: 1px; }
@@ -96,6 +106,9 @@
   var KEY = '__NCP_KEY_ID__';
 
   var initial = { lat: 37.5665, lng: 126.9780, zoom: 15 };
+
+  /* 멤버 색을 못 받았을 때 쓰는 기본 핀 색 — 앱(core/PinColors)과 같은 선명한 앰버 */
+  var DEFAULT_COLOR = '#F0A500';
 
   var map = null;
   var ready = false;
@@ -157,18 +170,70 @@
 
   // ------------------------------------------------------------------ 그리기
 
-  function pinIcon(member) {
-    var color = member.color || '#E5C158';
+  function pinHtml(member, color) {
     var initial = (String(member.name || '?').trim().charAt(0) || '?').toUpperCase();
-    var opacity = (typeof member.alpha === 'number') ? member.alpha : 1;
-    var cls = 'pinwrap' + (member.selected ? ' sel' : '');
-    var html = '<div class="' + cls + '" data-pin-id="' + escapeHtml(member.id) + '"' +
-      ' style="--c:' + escapeHtml(color) + ';opacity:' + opacity + '">' +
+    var cls = 'pinwrap' + (member.selected ? ' sel' : '') + (member.stale ? ' stale' : '');
+    return '<div class="' + cls + '" data-pin-id="' + escapeHtml(member.id) + '"' +
+      ' style="--c:' + escapeHtml(color) + '">' +
       '<div class="bubble">' + escapeHtml(initial) + '</div>' +
       '<div class="tail"></div>' +
       '<div class="label">' + escapeHtml(trimLabel(member.name)) + '</div>' +
       '</div>';
-    return { content: html, size: new naver.maps.Size(1, 1), anchor: new naver.maps.Point(0, 0) };
+  }
+
+  function pinIcon(member) {
+    var color = member.color || DEFAULT_COLOR;
+    return {
+      content: pinHtml(member, color),
+      size: new naver.maps.Size(1, 1),
+      anchor: new naver.maps.Point(0, 0)
+    };
+  }
+
+  /* 화면에 있는 핀을 제자리에서 고친다.
+     v1.0.9 까지는 멤버 목록이 올 때마다 setIcon() 으로 마커 아이콘을 **새로 만들었다**.
+     네이버 지도는 그때 옛 요소를 지우지 못해 같은 핀이 두 겹으로 남는 잔상이 생겼고
+     (2026-11-27 실기기: `홍` 핀 아래에 까만 원이 겹침), 좌표가 바뀌어도 새로 그리느라 무거웠다.
+     이제는 좌표만 setPosition 으로 옮기고, 색·선택·오래됨 표시는 DOM 클래스로 바꾼다. */
+  function pinNodes(id) {
+    if (!document.querySelectorAll) return [];
+    try {
+      return document.querySelectorAll('.pinwrap[data-pin-id="' + id + '"]') || [];
+    } catch (e) { return []; }
+  }
+
+  function applyPinDom(member) {
+    var nodes = pinNodes(member.id);
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      var color = member.color || DEFAULT_COLOR;
+      if (el.style) {
+        if (el.style.setProperty) el.style.setProperty('--c', color);
+        else el.style['--c'] = color;
+      }
+      var cls = 'pinwrap' + (member.selected ? ' sel' : '') + (member.stale ? ' stale' : '');
+      if (el.setAttribute) el.setAttribute('class', cls);
+      else el.className = cls;
+      var bubble = el.children ? el.children[0] : null;
+      var label = el.children ? el.children[el.children.length - 1] : null;
+      var initial = (String(member.name || '?').trim().charAt(0) || '?').toUpperCase();
+      if (bubble && bubble.innerHTML !== undefined) bubble.innerHTML = escapeHtml(initial);
+      if (label && label.innerHTML !== undefined) label.innerHTML = escapeHtml(trimLabel(member.name));
+    }
+  }
+
+  /* 목록에서 빠졌는데 화면에 남아 있는 핀 요소를 지운다 (잔상·중복 마커 정리) */
+  function sweepPins(seen) {
+    if (!document.querySelectorAll) return;
+    var nodes;
+    try { nodes = document.querySelectorAll('.pinwrap[data-pin-id]'); } catch (e) { return; }
+    if (!nodes) return;
+    for (var i = 0; i < nodes.length; i++) {
+      var id = nodes[i].getAttribute ? nodes[i].getAttribute('data-pin-id') : '';
+      if (id && seen[id]) continue;
+      var parent = nodes[i].parentNode;
+      if (parent && parent.removeChild) parent.removeChild(nodes[i]);
+    }
   }
 
   function applyMembers(list) {
@@ -178,13 +243,13 @@
       var member = list[i];
       if (!member || !member.id) continue;
       seen[member.id] = true;
-      var icon = pinIcon(member);
+      var position = new naver.maps.LatLng(member.lat, member.lng);
       var marker = memberMarkers[member.id];
       if (!marker) {
         marker = new naver.maps.Marker({
-          position: new naver.maps.LatLng(member.lat, member.lng),
+          position: position,
           map: map,
-          icon: icon,
+          icon: pinIcon(member),
           zIndex: member.selected ? 200 : 100
         });
         (function (id) {
@@ -192,9 +257,10 @@
         })(member.id);
         memberMarkers[member.id] = marker;
       } else {
-        marker.setPosition(new naver.maps.LatLng(member.lat, member.lng));
-        marker.setIcon(icon);
+        // 좌표가 바뀌면 **여기서 실제로** 마커를 옮긴다 (핀이 제자리에 멈추던 문제)
+        marker.setPosition(position);
         marker.setZIndex(member.selected ? 200 : 100);
+        applyPinDom(member);
       }
     }
     for (var id in memberMarkers) {
@@ -203,6 +269,7 @@
         delete memberMarkers[id];
       }
     }
+    sweepPins(seen);
   }
 
   function applyMy(lat, lng) {
@@ -221,6 +288,7 @@
         }
       });
     } else {
+      // 내 파란 점도 측정이 올 때마다 실제로 옮긴다 (v1.0.10)
       myMarker.setPosition(position);
     }
     if (follow) centerOn(lat, lng, null);

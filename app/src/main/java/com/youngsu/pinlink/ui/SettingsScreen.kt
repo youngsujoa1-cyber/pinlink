@@ -22,6 +22,7 @@ import com.youngsu.pinlink.data.AppPrefs
 import com.youngsu.pinlink.data.PinSession
 import com.youngsu.pinlink.data.Sync
 import com.youngsu.pinlink.data.SyncLog
+import kotlin.math.roundToInt
 
 /** 설정 — 프로필, 위치 권한 상태, 앱 언어, 개인정보 처리방침, 광고·버전 안내 */
 class SettingsScreen(private val host: MainActivity) {
@@ -40,6 +41,7 @@ class SettingsScreen(private val host: MainActivity) {
     private val diagStatus: TextView
     private val diagRoom: TextView
     private val diagLast: TextView
+    private val diagGps: TextView
     private val diagLog: TextView
 
     init {
@@ -192,6 +194,24 @@ class SettingsScreen(private val host: MainActivity) {
         diag.addView(diagLast, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ))
+        // v1.0.10 — 위치가 안 움직일 때 원인을 바로 보게: 마지막 측정 시각·제공자·정확도·등록된 제공자
+        diagGps = Ui.text(act, "", 11f, act.getColor(R.color.text_secondary)).apply {
+            setPadding(0, act.dp(6f), 0, 0)
+            setTextIsSelectable(true)
+        }
+        diag.addView(diagGps, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
+        diag.addView(
+            Ui.button(act, act.getString(R.string.settings_diag_refresh), primary = false, iconRes = R.drawable.ic_my_location) {
+                PinSession.refreshNow()
+                host.toast(act.getString(R.string.settings_diag_refreshed))
+                refresh()
+            },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = act.dp(10f) }
+        )
         diag.addView(
             Ui.sectionTitle(act, act.getString(R.string.settings_diag_log)),
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -351,6 +371,23 @@ class SettingsScreen(private val host: MainActivity) {
         } else {
             act.getString(R.string.settings_diag_last, "${PinSession.lastFaultAt} · ${fault.logText}")
         }
+        // 위치 수신 상태 — '안 움직여'·'GPS 못잡는듯'을 겪을 때 여기 한 줄로 원인이 보인다
+        val age = PinSession.fixAgeSeconds
+        diagGps.text = if (age < 0L) {
+            act.getString(R.string.settings_diag_gps_none)
+        } else {
+            val providers = PinSession.locationProviders
+            act.getString(
+                R.string.settings_diag_gps,
+                if (age < 60L) "${age}s" else "${age / 60L}min",
+                PinSession.lastFixProvider.ifBlank { "-" },
+                if (PinSession.lastFixAccuracy > 0.0) "±${PinSession.lastFixAccuracy.roundToInt()}m" else "-",
+                if (providers.isEmpty()) "-" else providers.joinToString(",")
+            )
+        }
+        diagGps.setTextColor(
+            act.getColor(if (age in 0 until 20L) R.color.text_secondary else R.color.warn)
+        )
         val lines = SyncLog.tail(8)
         diagLog.text = if (lines.isEmpty()) act.getString(R.string.settings_diag_empty) else lines.joinToString("\n")
     }

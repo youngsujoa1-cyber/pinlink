@@ -222,4 +222,9 @@
     <string name="chat_collapse">Collapse</string>
     <string name="chat_expand">Expand</string>
     <string name="chat_open_full">Full screen</string>
+    <string name="toast_location_refresh">Refreshing my location now</string>
+    <string name="settings_diag_gps">GPS fix %1$s · provider %2$s · accuracy %3$s · registered %4$s</string>
+    <string name="settings_diag_gps_none">No GPS fix yet — location has not arrived</string>
+    <string name="settings_diag_refresh">Get my location now</string>
+    <string name="settings_diag_refreshed">Location refreshed</string>
 </resources>

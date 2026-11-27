@@ -9,6 +9,7 @@ import com.youngsu.pinlink.core.FirestoreCodec
 import com.youngsu.pinlink.core.MeetingPoint
 import com.youngsu.pinlink.core.Member
 import com.youngsu.pinlink.core.PinLogic
+import com.youngsu.pinlink.core.PinColors
 import com.youngsu.pinlink.map.MapRegion
 import com.youngsu.pinlink.map.MapSource
 import com.youngsu.pinlink.map.MapStyle
@@ -311,24 +312,34 @@ class HybridMapView(context: Context) : FrameLayout(context) {
             if (!member.valid) continue
             if (!first) builder.append(',')
             first = false
-            val alpha = when {
-                !member.sharing -> 0.35
-                PinLogic.isStale(member.updatedAt, now) -> 0.6
-                else -> 1.0
-            }
+            // 오래된 핀은 투명도로 흐리지 않는다 — 밝은 지도에서 사라져 보였다.
+            // 대신 stale 표시를 보내 지도 쪽에서 채도만 낮춘다 (v1.0.10)
+            val stale = !member.sharing || PinLogic.isStale(member.updatedAt, now)
             builder.append('{')
             builder.append("\"id\":").append(FirestoreCodec.jsonString(member.id))
             builder.append(",\"name\":").append(FirestoreCodec.jsonString(member.name))
-            builder.append(",\"color\":").append(FirestoreCodec.jsonString(member.color))
+            // 아바타 색 그대로 쓰면 밝은 지도에서 연한 파스텔이 사라진다 — 채도를 올린 지도용 색
+            builder.append(",\"color\":").append(FirestoreCodec.jsonString(PinColors.vivid(member.color)))
             builder.append(",\"lat\":").append(jsNumber(member.lat))
             builder.append(",\"lng\":").append(jsNumber(member.lng))
-            builder.append(",\"alpha\":").append(alpha)
+            builder.append(",\"stale\":").append(stale)
             builder.append(",\"selected\":").append(member.id == selectedId)
             builder.append('}')
         }
         builder.append(']')
         return builder.toString()
     }
+
+    /** 화면 검사용 — 지금 지도에 밀어 넣을 멤버 JSON (좌표가 바뀌면 이 문자열도 바뀌어야 핀이 움직인다) */
+    @androidx.annotation.VisibleForTesting
+    internal fun membersJsonForTest(list: List<Member> = members): String = membersJson(list)
+
+    /** 화면 검사용 — 지도에 마지막으로 넘긴 내 좌표 */
+    @androidx.annotation.VisibleForTesting
+    internal val myLatForTest: Double? get() = myLat
+
+    @androidx.annotation.VisibleForTesting
+    internal val myLngForTest: Double? get() = myLng
 
     private fun meetingKey(point: MeetingPoint?): String =
         if (point == null) "-" else "${jsNumber(point.lat)},${jsNumber(point.lng)},${point.name}"

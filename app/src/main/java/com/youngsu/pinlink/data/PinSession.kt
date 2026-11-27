@@ -9,6 +9,7 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.BatteryManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -35,6 +36,13 @@ import java.util.concurrent.CopyOnWriteArrayList
  *  - 고른 시간이 끝나면 스스로 멈춘다(알림·핀도 함께 사라진다).
  */
 object PinSession {
+
+    /**
+     * 안드로이드 12+ 의 '융합' 위치 제공자 이름.
+     * (LocationManager.FUSED_PROVIDER 상수는 API 31 부터라, 옛 기기에서도 컴파일·실행되도록 이름으로 쓴다 —
+     *  이 제공자가 없는 기기에서는 [supports] 가 걸러 낸다)
+     */
+    private const val FUSED_PROVIDER = "fused"
 
     /** 지금 상태(화면 켜짐·채팅 보고 있음)에 맞는 폴링 주기 — v1.0.8 */
     private val timing: PinLogic.PollTiming
@@ -164,6 +172,34 @@ object PinSession {
     private var locationManager: LocationManager? = null
     private var previousFix: Fix? = null
     private var stayAnchor: Fix? = null
+
+    // ------------------------------------------ 위치 수신 상태 (v1.0.10 · 설정 진단에 그대로 보인다)
+
+    /** 마지막으로 측정값을 받은 시각(ms) — 0 이면 아직 한 번도 못 받았다 */
+    @Volatile var lastFixAt: Long = 0L
+        private set
+
+    /** 마지막 측정을 준 제공자 (fused · gps · network · passive) */
+    @Volatile var lastFixProvider: String = ""
+        private set
+
+    /** 마지막 측정의 정확도(m) — 0 이면 모름 */
+    @Volatile var lastFixAccuracy: Double = 0.0
+        private set
+
+    /** 이번 실행에서 받은 측정 횟수 */
+    @Volatile var locationFixCount: Int = 0
+        private set
+
+    /** 지금 등록되어 있는 위치 제공자들 */
+    @Volatile var locationProviders: List<String> = emptyList()
+        private set
+
+    /** 마지막으로 '한 번만 받기'를 요청한 시각 — 요청 폭주를 막는다 */
+    @Volatile private var lastFixAttemptAt = 0L
+
+    /** 한 번만 받기 요청을 진행 중인가 (같은 요청이 겹치지 않게) */
+    @Volatile private var fixRequestBusy = false
 
     val demo: Boolean get() = Sync.isDemo
 
@@ -605,6 +641,9 @@ object PinSession {
             prefs.expiresAt = PinLogic.expiryFrom(now, newMode)
             reportedHidden = false
             startService()
+            applyLocation()
+            // 공유를 켜면 바로 한 번 새로 받아 온다 — 마지막 좌표가 아니라 '지금 여기'부터 시작하게 (v1.0.10)
+            requestSingleFix("share-start")
             uploadMine(force = true)
         } else {
             prefs.startedAt = 0L
@@ -672,14 +711,20 @@ object PinSession {
     // -------------------------------------------------------------------- 위치
 
     fun onLocation(location: Location) {
+        if (!location.latitude.isFinite() || !location.longitude.isFinite()) return
+        if (location.latitude == 0.0 && location.longitude == 0.0) return
+        val at = if (location.time > 0L) location.time else System.currentTimeMillis()
+        val accuracy = if (location.hasAccuracy()) location.accuracy.toDouble() else 0.0
         val previous = myFix
+        // 늦게 도착한 옛 측정·아주 부정확한 측정은 버린다 — 핀이 뒤로 튀지 않게 (v1.0.10)
+        if (!PinLogic.betterFix(previous?.at ?: 0L, previous?.accuracyMeters ?: 0.0, at, accuracy)) return
         val rawSpeedMps = if (location.hasSpeed()) location.speed.toDouble() else null
         val fix = Fix(
             lat = location.latitude,
             lng = location.longitude,
             speedMps = rawSpeedMps ?: 0.0,
-            accuracyMeters = if (location.hasAccuracy()) location.accuracy.toDouble() else 0.0,
-            at = System.currentTimeMillis()
+            accuracyMeters = accuracy,
+            at = at
         )
         if (!fix.valid) return
         // 속도: GPS 가 주면 그대로, 아니면 두 측정값 사이 거리·시간으로 계산한다.
@@ -692,6 +737,11 @@ object PinSession {
         previousFix = fix
         myFix = fix
         mySpeedKmh = speedKmh
+        // 진단(설정 → 동기화 진단)에 보여 줄 마지막 측정 정보 (v1.0.10)
+        lastFixAt = System.currentTimeMillis()
+        lastFixProvider = location.provider.orEmpty()
+        lastFixAccuracy = accuracy
+        locationFixCount++
         // 체류 시간: 70m 넘게 벗어나거나 움직이기 시작하면 '지금'으로 다시 잡는다
         val nextStay = PinLogic.nextStaySince(myStaySince, stayAnchor, fix, speedKmh)
         if (nextStay != myStaySince) {
@@ -704,7 +754,9 @@ object PinSession {
             prefs.stayLng = fix.lng
         }
         Sync.demoEngine?.anchor = fix
-        if (previous == null || previous.at <= 0L) notifyChanged()
+        // 화면은 측정이 올 때마다 바로 갱신한다 — 서버 업로드가 늦거나 429 로 막혀도
+        // 내 파란 점·남은 사람 핀이 한 박자 늦게라도 따라오게 (v1.0.10)
+        notifyChanged()
         // 위치 올리기 (v1.0.9) — 측정값이 올 때마다 덮어쓰지 않고, 5m 이상 움직였거나 30초(꺼짐 45초)가
         // 지났을 때만 올린다. 쿨다운(429) 중에는 아예 보내지 않는다.
         if (isSharingNow() && !inQuotaCooldown) uploadMine()
@@ -734,6 +786,9 @@ object PinSession {
         )
     }
 
+    /** 마지막 업로드가 실패했는가 — 실패하면 다음 시도를 5초 뒤로 미룬다 */
+    @Volatile private var uploadFailed = false
+
     /**
      * 내 위치를 서버에 올린다.
      * [force] 는 공유 시작·숨김·방 입장 같은 **수동 즉시 전송**에만 쓴다 —
@@ -743,6 +798,8 @@ object PinSession {
         if (roomCode.isEmpty()) return
         val now = System.currentTimeMillis()
         if (!force) {
+            // 실패 직후에는 5초 쉬어 간다 — 끊긴 망에서 1초마다 재시도하지 않게 (v1.0.10)
+            if (uploadFailed && lastUploadAt > 0L && now >= lastUploadAt && now - lastUploadAt < 5_000L) return
             val every = timing
             if (!PinLogic.shouldUpload(
                     lastUploadAt = lastUploadAt,
@@ -758,14 +815,18 @@ object PinSession {
         }
         val member = myMember(hidden) ?: return
         lastUploadAt = now
-        lastUploadLat = member.lat
-        lastUploadLng = member.lng
         uploadedBefore = true
         engine.upload(roomCode, member) { fault ->
-            if (fault != null && !demo) {
-                noteFault("member-upload", fault)
-            } else if (fault == null && lastFaultAt == "member-upload") {
-                clearFault()
+            if (fault == null) {
+                // 서버가 실제로 받은 좌표만 '올린 자리'로 기억한다 — 실패한 좌표를 기억하면
+                // 그 뒤로는 5m 를 움직여도 다시 올리지 않는다 (v1.0.10)
+                lastUploadLat = member.lat
+                lastUploadLng = member.lng
+                uploadFailed = false
+                if (lastFaultAt == "member-upload") clearFault()
+            } else {
+                uploadFailed = true
+                if (!demo) noteFault("member-upload", fault)
             }
             notifyChanged()
         }
@@ -966,6 +1027,10 @@ object PinSession {
         applyLocation()
         // 화면으로 돌아왔을 때 (또는 꺼질 때) — 틱 주기를 바꾸고 다음 틱을 5초 기다리지 않는다 (v1.0.8)
         if (uiVisible != wasVisible) kickClock()
+        // 화면으로 돌아왔는데 마지막 측정이 오래됐으면 바로 한 번 새로 받는다 (v1.0.10)
+        if (visible && PinLogic.fixRetryDue(lastFixAt, 0L, System.currentTimeMillis())) {
+            requestSingleFix("ui-resume")
+        }
     }
 
     private fun applyLocation() {
@@ -973,51 +1038,207 @@ object PinSession {
     }
 
     /**
-     * 권한은 위에서 [hasPermission] 으로 확인하고, 꺼진 사이 회수될 수 있으므로
-     * 요청 자체도 runCatching 으로 감싼다 (lint 는 이 흐름을 읽지 못한다).
+     * 위치 요청을 건다 (v1.0.10).
+     *
+     * v1.0.9 까지는 **한 제공자만** 골라 걸었다 — GPS 가 켜져 있으면 GPS 에만 걸고,
+     * 등록이 한 번 실패하거나 GPS 칩이 측정을 멈추면 다시 요청할 길이 없어
+     * 파란이 점과 상대방 핀이 마지막 자리에 그대로 멈췄다(실기기: "안 움직여" · "Gps 못잡는듯").
+     * 이제는 융합(fused, 안드로이드 12+) · GPS · 네트워크를 **각각 따로** 걸고(하나가 실패해도 나머지는 산다),
+     * 살아 있는 측정이 없으면 워치독이 15초마다 한 번씩 강제로 다시 받는다.
      */
     @SuppressLint("MissingPermission")
     @Synchronized
     private fun startLocationUpdates() {
-        if (!hasPermission(Manifest.permission.ACCESS_FINE_LOCATION) &&
-            !hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
-        ) return
+        if (!hasForegroundPermission()) return
         val manager = app.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
         locationManager = manager
-        if (listener != null) return
-        val made = object : LocationListener {
+        val made = listener ?: object : LocationListener {
             override fun onLocationChanged(location: Location) = onLocation(location)
             @Deprecated("Deprecated in Java")
             override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
-            override fun onProviderEnabled(provider: String) {}
-            override fun onProviderDisabled(provider: String) {}
-        }
-        listener = made
-        runCatching {
-            val fine = hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
-            val provider = if (fine && manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                LocationManager.GPS_PROVIDER
-            } else {
-                LocationManager.NETWORK_PROVIDER
+            override fun onProviderEnabled(provider: String) { requestSingleFix("provider-on:$provider") }
+            override fun onProviderDisabled(provider: String) {
+                SyncLog.record("gps", "$provider 꺼짐 — 다른 제공자로 계속")
             }
-            manager.requestLocationUpdates(provider, 3_000L, 2f, made, Looper.getMainLooper())
-            if (provider == LocationManager.GPS_PROVIDER) {
-                runCatching {
-                    manager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 5_000L, 5f, made, Looper.getMainLooper())
-                }
-            }
-            manager.getLastKnownLocation(provider)?.let { onLocation(it) }
+        }.also { listener = it }
+
+        val fine = hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+        val wanted = ArrayList<String>(3)
+        if (fine && supports(manager, FUSED_PROVIDER)) wanted.add(FUSED_PROVIDER)
+        if (fine) wanted.add(LocationManager.GPS_PROVIDER)
+        wanted.add(LocationManager.NETWORK_PROVIDER)
+
+        for (provider in wanted) {
+            if (registered.contains(provider)) continue
+            // 최소 간격만 두고 거리 조건은 두지 않는다 — 서버 업로드는 [PinLogic.shouldUpload] 가
+            // 5m/30초로 줄이므로, 기기 쪽은 '자주 받아 두고 필요한 것만 올린다'가 맞다
+            val every = if (provider == LocationManager.NETWORK_PROVIDER) 3_000L else 2_000L
+            val ok = runCatching {
+                manager.requestLocationUpdates(provider, every, 0f, made, Looper.getMainLooper())
+            }.isSuccess
+            if (ok) madeProviders.add(provider) else SyncLog.record("gps", "$provider 요청 실패")
         }
+        registered.clear()
+        registered.addAll(madeProviders)
+        locationProviders = registered.toList()
+
+        // 아직 측정이 없으면 마지막으로 알던 위치라도 바로 보여 준다 (앱을 열자마자 내 핀이 보이게)
+        if (myFix == null) bestLastKnown(manager)?.let { onLocation(it) }
+        if (registered.isEmpty()) {
+            SyncLog.record("gps", "걸린 제공자 없음 — 15초마다 다시 시도")
+            requestSingleFix("register-failed")
+        }
+        startFixWatchdog()
     }
 
     @Synchronized
     private fun stopLocationUpdates() {
-        val manager = locationManager ?: return
-        listener?.let { runCatching { manager.removeUpdates(it) } }
+        stopFixWatchdog()
+        val manager = locationManager
+        val made = listener
+        if (manager != null && made != null) runCatching { manager.removeUpdates(made) }
+        madeProviders.clear()
+        registered.clear()
+        locationProviders = emptyList()
         listener = null
     }
 
     private var listener: LocationListener? = null
+    private val madeProviders = HashSet<String>()
+    private val registered = HashSet<String>()
+
+    /** 이 기기가 그 제공자를 갖고 있는가 (permission 이 필요한 호출이라 감싸 둔다) */
+    private fun supports(manager: LocationManager, provider: String): Boolean =
+        runCatching { manager.allProviders?.contains(provider) == true }.getOrDefault(false)
+
+    /** 마지막으로 알던 위치 중 가장 새것 · 가장 정확한 것 */
+    @SuppressLint("MissingPermission")
+    private fun bestLastKnown(manager: LocationManager): Location? {
+        val candidates = ArrayList<Location>(3)
+        for (provider in listOf(FUSED_PROVIDER, LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)) {
+            if (!supports(manager, provider)) continue
+            runCatching { manager.getLastKnownLocation(provider) }.getOrNull()?.let { candidates.add(it) }
+        }
+        return candidates.filter { it.latitude != 0.0 || it.longitude != 0.0 }
+            .maxByOrNull { it.time }
+    }
+
+    /**
+     * 지금 한 번만 위치를 받는다 (v1.0.10).
+     * 연속 요청이 멈췄을 때(워치독) · 화면 복귀 · 공유 시작 · 사용자의 '지금 갱신' 에서 부른다.
+     * 안드로이드 11+ 는 [LocationManager.getCurrentLocation], 그 이하는 단발 요청을 쓴다.
+     */
+    @SuppressLint("MissingPermission")
+    @Suppress("DEPRECATION")
+    private fun requestSingleFix(reason: String) {
+        if (!hasForegroundPermission()) return
+        val manager = locationManager ?: return
+        val made = listener ?: return
+        val now = System.currentTimeMillis()
+        if (fixRequestBusy) return
+        if (lastFixAttemptAt > 0L && now >= lastFixAttemptAt && now - lastFixAttemptAt < 2_000L) return
+        lastFixAttemptAt = now
+
+        val fine = hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+        val provider = when {
+            fine && supports(manager, FUSED_PROVIDER) -> FUSED_PROVIDER
+            fine && supports(manager, LocationManager.GPS_PROVIDER) -> LocationManager.GPS_PROVIDER
+            else -> LocationManager.NETWORK_PROVIDER
+        }
+        val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            runCatching {
+                fixRequestBusy = true
+                manager.getCurrentLocation(
+                    provider,
+                    null,
+                    ContextCompat.getMainExecutor(app)
+                ) { location ->
+                    fixRequestBusy = false
+                    if (location != null) onLocation(location) else SyncLog.record("gps", "$reason · $provider 측정 없음")
+                }
+            }.isSuccess
+        } else {
+            runCatching { manager.requestSingleUpdate(provider, made, Looper.getMainLooper()) }.isSuccess
+        }
+        if (!ok) {
+            fixRequestBusy = false
+            SyncLog.record("gps", "$reason · $provider 단발 요청 실패")
+            // 단발 요청이 막히면 등록을 모두 풀고 다시 건다 — 그사이에도 마지막 위치는 보여 준다
+            bestLastKnown(manager)?.let { onLocation(it) }
+            reregister()
+        }
+    }
+
+    @Synchronized
+    private fun reregister() {
+        // 다시 걸기가 실패하면 또 다시 걸기를 부를 수 있다 — 한 번만 돌게 막는다
+        if (reregistering) return
+        reregistering = true
+        try {
+            stopLocationUpdates()
+            startLocationUpdates()
+        } finally {
+            reregistering = false
+        }
+    }
+
+    @Volatile private var reregistering = false
+
+    /**
+     * 5초마다 '살아 있는 측정'을 확인한다 — 20초 넘게 측정이 없으면 15초 간격으로 한 번씩 다시 받는다.
+     * (GPS 칩이 조용해져도 파란 점이 영영 멈추지 않게 하는 마지막 안전장치)
+     */
+    private val fixWatchdog = object : Runnable {
+        override fun run() {
+            if (!(serviceRunning || uiVisible)) return
+            val now = System.currentTimeMillis()
+            // 단발 요청이 응답 없이 오래 묶여 있으면 풀어 준다 (그대로 두면 다시 요청할 수 없다)
+            if (fixRequestBusy && lastFixAttemptAt > 0L && now - lastFixAttemptAt > 30_000L) {
+                fixRequestBusy = false
+            }
+            if (PinLogic.fixRetryDue(lastFixAt, lastFixAttemptAt, now)) {
+                requestSingleFix("watchdog")
+            }
+            main.postDelayed(this, 5_000L)
+        }
+    }
+
+    private var watchdogOn = false
+
+    private fun startFixWatchdog() {
+        if (watchdogOn) return
+        watchdogOn = true
+        main.removeCallbacks(fixWatchdog)
+        main.postDelayed(fixWatchdog, 5_000L)
+    }
+
+    private fun stopFixWatchdog() {
+        if (!watchdogOn) return
+        watchdogOn = false
+        main.removeCallbacks(fixWatchdog)
+    }
+
+    /**
+     * 사용자가 '지금 갱신'을 눌렀을 때 (v1.0.10) — 지도 우측 아래 현위치 버튼·설정의 갱신 버튼이 부른다.
+     * 새 측정을 한 번 받고, 지금 좌표를 서버에 바로 올리고, 남은 사람들 위치도 새로 받아 온다.
+     */
+    fun refreshNow() {
+        requestSingleFix("manual")
+        lastUploadAt = 0L
+        if (myFix != null && roomCode.isNotEmpty()) uploadMine(force = true)
+        refreshMembers()
+        refreshRoom()
+        notifyChanged()
+    }
+
+    /** 마지막 측정이 몇 초 전인가 — 설정 진단 표시용 (아직 없으면 -1) */
+    val fixAgeSeconds: Long
+        get() {
+            val at = lastFixAt
+            if (at <= 0L) return -1L
+            val delta = System.currentTimeMillis() - at
+            return if (delta < 0L) 0L else delta / 1000L
+        }
 
     private fun hasPermission(permission: String): Boolean =
         ContextCompat.checkSelfPermission(app, permission) == PackageManager.PERMISSION_GRANTED

@@ -5,6 +5,7 @@ import com.youngsu.pinlink.core.Fix
 import com.youngsu.pinlink.core.MeetingPoint
 import com.youngsu.pinlink.core.Member
 import com.youngsu.pinlink.core.PinLogic
+import com.youngsu.pinlink.core.PinColors
 import com.youngsu.pinlink.core.ShareMode
 import com.youngsu.pinlink.map.MapRegion
 import com.youngsu.pinlink.map.MapSource
@@ -65,6 +66,8 @@ fun main() {
     timingChecks()
     uploadChecks()
     quotaChecks()
+    fixChecks()
+    colorChecks()
     codecChecks()
     regionChecks()
 
@@ -717,4 +720,73 @@ fun quotaChecks() {
     expect("notice again after 1 min", PinLogic.quotaNoticeDue(t0, t0 + 60_000), false)
     expect("notice after 10 min", PinLogic.quotaNoticeDue(t0, t0 + 10 * 60_000L), true)
     expect("notice after clock moved back", PinLogic.quotaNoticeDue(t0, t0 - 1_000), true)
+}
+
+// ------------------------------------------- 위치 수신 진단 (v1.0.10)
+
+fun fixChecks() {
+    val t0 = 1_700_000_000_000L
+
+    // 살아 있는 측정 — 20초까지는 '살아 있다'
+    expect("fix just now", PinLogic.fixFresh(t0, t0), true)
+    expect("fix 20s ago", PinLogic.fixFresh(t0, t0 + 20_000), true)
+    expect("fix 21s ago is dead", PinLogic.fixFresh(t0, t0 + 21_000), false)
+    expect("no fix is not fresh", PinLogic.fixFresh(0L, t0), false)
+    // 기기 시계가 뒤로 가도 살아 있는 것으로 본다 (핀이 영영 안 움직이지 않게)
+    expect("clock moved back is fresh", PinLogic.fixFresh(t0, t0 - 5_000), true)
+
+    // 다시 받아야 하는가 — 살아 있으면 요청하지 않는다
+    expect("fresh fix needs no retry", PinLogic.fixRetryDue(t0, 0L, t0 + 5_000), false)
+    expect("dead fix retries right away", PinLogic.fixRetryDue(t0, 0L, t0 + 30_000), true)
+    // 이미 시도했으면 15초 간격을 지킨다 (요청 폭주 방지)
+    expect("retry waits 15s", PinLogic.fixRetryDue(t0, t0 + 25_000, t0 + 35_000), false)
+    expect("retry after 15s", PinLogic.fixRetryDue(t0, t0 + 25_000, t0 + 40_000), true)
+    expect("never fixed retries at once", PinLogic.fixRetryDue(0L, 0L, t0), true)
+
+    // 새 측정 채택 — 더 새 값은 채택, 늦게 온 옛 값은 버린다
+    expect("newer fix wins", PinLogic.betterFix(t0, 10.0, t0 + 5_000, 30.0), true)
+    expect("older fix is dropped", PinLogic.betterFix(t0, 10.0, t0 - 5_000, 5.0), false)
+    // 같은 시각이면 정확도가 좋은 쪽
+    expect("same time better accuracy wins", PinLogic.betterFix(t0, 80.0, t0 + 500, 12.0), true)
+    expect("same time worse accuracy is dropped", PinLogic.betterFix(t0, 12.0, t0 + 500, 80.0), false)
+    expect("first fix always accepted", PinLogic.betterFix(0L, 0.0, t0, 500.0), true)
+    // 1초 안쪽 차이는 '같은 순간'으로 보고 정확도로 고른다 (융합·GPS·네트워크가 거의 동시에 올 때)
+    expect("within 1s compares accuracy", PinLogic.betterFix(t0, 10.0, t0 + 900, 40.0), false)
+
+    // 추적 주기: 화면이 켜져 있으면 1초, 꺼지면 10초 — 살아 있는지 확인은 5초마다
+    expectTrue("watchdog is faster than stale limit", PinLogic.FIX_ALIVE_MS > 5_000L * 3)
+    expectTrue("retry gap is shorter than stale limit", PinLogic.FIX_RETRY_MS < PinLogic.FIX_ALIVE_MS)
+}
+
+// --------------------------------------------- 지도 핀 색 (v1.0.10)
+
+fun colorChecks() {
+    // 아바타 파스텔 8색 — 모두 '지도용 선명한 색'으로 바뀌어야 한다
+    val palette = listOf("#E5C158", "#B9A7FF", "#6FE3FF", "#C9D3E0", "#7FDCC0", "#F2A9B4", "#F0B183", "#9FB4D8")
+    for (hex in palette) {
+        val vivid = PinColors.vivid(hex)
+        expectTrue("palette $hex → $vivid is a color", Regex("^#[0-9A-F]{6}$").matches(vivid))
+        expectTrue("palette $hex is more saturated", PinColors.channelSpread(vivid) >= PinColors.channelSpread(hex))
+    }
+    // 연분홍(홍) → 선명한 핫핑크
+    expect("rose becomes hot pink", PinColors.vivid("#F2A9B4"), "#FF2E63")
+    expect("orchid becomes violet", PinColors.vivid("#B9A7FF"), "#7C3AED")
+    expect("jade becomes emerald", PinColors.vivid("#7FDCC0"), "#059669")
+    // 소문자·공백도 같은 결과
+    expect("lowercase rose", PinColors.vivid(" #f2a9b4 "), "#FF2E63")
+    // 팔레트에 없는 색도 같은 색상으로 채도를 올린다
+    val custom = PinColors.vivid("#88BB88")
+    expectTrue("custom color is vivid ($custom)", PinColors.channelSpread(custom) >= 90)
+    expectTrue("custom color keeps greenish hue", PinColors.parse(custom)!![1] >= PinColors.parse(custom)!![0])
+    // 알파가 붙은 값·잘못된 값
+    expect("alpha prefixed color", PinColors.vivid("#FFF2A9B4"), "#FF2E63")
+    expect("empty color falls back", PinColors.vivid(""), PinColors.DEFAULT)
+    expect("garbage color falls back", PinColors.vivid("nope"), PinColors.DEFAULT)
+    expect("pin text is white", PinColors.onPin("#FF2E63"), "#FFFFFF")
+
+    // 회색은 색상이 없으므로 밝기만 낮춰 대비를 준다
+    val gray = PinColors.vivid("#B0B0B0")
+    expectTrue("gray becomes dark enough ($gray)", PinColors.channelSpread(gray) < 40)
+    val hsl = PinColors.toHsl(255, 46, 99)
+    expectNear("rose hue", hsl[0], 344.0, 4.0)
 }

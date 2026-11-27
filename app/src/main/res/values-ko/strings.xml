@@ -210,4 +210,9 @@
     <string name="chat_collapse">접기</string>
     <string name="chat_expand">펼치기</string>
     <string name="chat_open_full">크게 보기</string>
+    <string name="toast_location_refresh">내 위치를 다시 받아 왔어요</string>
+    <string name="settings_diag_gps">GPS 수신 %1$s · 제공자 %2$s · 정확도 %3$s · 등록 %4$s</string>
+    <string name="settings_diag_gps_none">GPS 수신 없음 — 아직 위치를 받지 못했어요</string>
+    <string name="settings_diag_refresh">지금 위치 다시 받기</string>
+    <string name="settings_diag_refreshed">위치를 새로 받아 왔어요</string>
 </resources>

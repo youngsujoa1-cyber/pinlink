@@ -11,6 +11,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.widget.NestedScrollView
 import com.youngsu.pinlink.R
+import com.youngsu.pinlink.core.Member
 import com.youngsu.pinlink.core.PinLogic
 import com.youngsu.pinlink.core.ShareMode
 import com.youngsu.pinlink.data.PinSession
@@ -348,17 +349,16 @@ class RoomScreen(private val host: MainActivity) {
                 val row = membersBox.getChildAt(i)
                 val id = row.tag as? String ?: continue
                 val meta = row.findViewWithTag<TextView>("meta") ?: continue
+                val trail = row.findViewWithTag<TextView>("trail")
                 if (id == "__me__") {
                     meta.text = myMetaLine(now)
+                    trail?.text = myTrailing()
                 } else {
                     val member = PinSession.members.firstOrNull { it.id == id } ?: continue
-                    meta.text = buildString {
-                        append(lastUpdateText(member.updatedAt, now))
-                        val speed = PinLogic.speedLabelValue(member.speedKmh)
-                        if (speed > 0) append(" · ").append(act.getString(R.string.speed_kmh, speed))
-                        else if (member.staySince > 0L) append(" · ").append(stayText(act, member.staySince, now))
-                        if (member.battery in 0..100) append(" · ").append(act.getString(R.string.member_battery, member.battery))
-                    }
+                    meta.text = memberMetaLine(member, now)
+                    // v1.0.10 — 오른쪽 상태 글자가 행을 만들 때 값('2분째')에 멈춰 있어
+                    // 왼쪽 문구('2시간 11분째 머무름')와 서로 다른 말을 하고 있었다. 함께 갱신한다.
+                    trail?.text = memberTrailing(member)
                 }
             }
         }
@@ -379,9 +379,29 @@ class RoomScreen(private val host: MainActivity) {
         }
         val battery = PinSession.battery
         if (battery in 0..100) parts.add(act.getString(R.string.member_battery, battery))
-        parts.add(act.getString(if (PinSession.isSharingNow()) R.string.sharing_live else R.string.sharing_paused))
+        // '공유 중/일시정지'는 오른쪽 상태 자리(myTrailing)에만 둔다 — 같은 말을 두 번 쓰지 않는다 (v1.0.10)
         return parts.joinToString(" · ")
     }
+
+    /** 내 오른쪽 상태 글자 */
+    private fun myTrailing(): String =
+        act.getString(if (PinSession.isSharingNow()) R.string.sharing_live else R.string.sharing_paused)
+
+    private fun memberMetaLine(member: Member, now: Long): String {
+        val parts = ArrayList<String>()
+        parts.add(lastUpdateText(member.updatedAt, now))
+        val speed = PinLogic.speedLabelValue(member.speedKmh)
+        if (speed > 0) parts.add(act.getString(R.string.speed_kmh, speed))
+        else if (member.staySince > 0L) parts.add(stayText(act, member.staySince, now))
+        if (member.battery in 0..100) parts.add(act.getString(R.string.member_battery, member.battery))
+        return parts.joinToString(" · ")
+    }
+
+    /** 오른쪽 상태 글자 — 머문 시간은 왼쪽 문구에만 두어 같은 말이 겹치지 않게 한다 */
+    private fun memberTrailing(member: Member): String = act.getString(
+        if (member.moving || PinLogic.speedLabelValue(member.speedKmh) > 0) R.string.state_moving
+        else R.string.state_stopped
+    )
 
     private fun rebuildMembers(now: Long) {
         membersBox.removeAllViews()
@@ -394,7 +414,7 @@ class RoomScreen(private val host: MainActivity) {
             name = PinSession.myName,
             color = PinSession.myColor,
             meta = myMetaLine(now),
-            trailing = act.getString(if (PinSession.isSharingNow()) R.string.sharing_live else R.string.sharing_paused),
+            trailing = myTrailing(),
             host = hostId.isNotEmpty() && hostId == pinDeviceId()
         )
         me.tag = "__me__"
@@ -403,23 +423,11 @@ class RoomScreen(private val host: MainActivity) {
         ).apply { topMargin = act.dp(8f) })
 
         for (member in PinSession.members) {
-            val meta = buildString {
-                append(lastUpdateText(member.updatedAt, now))
-                val speed = PinLogic.speedLabelValue(member.speedKmh)
-                if (speed > 0) append(" · ").append(act.getString(R.string.speed_kmh, speed))
-                else if (member.staySince > 0L) append(" · ").append(stayText(act, member.staySince, now))
-                if (member.battery in 0..100) append(" · ").append(act.getString(R.string.member_battery, member.battery))
-            }
-            val speed = PinLogic.speedLabelValue(member.speedKmh)
             val row = memberRow(
                 name = member.name,
                 color = member.color,
-                meta = meta,
-                trailing = when {
-                    speed > 0 -> act.getString(R.string.speed_kmh, speed)
-                    member.staySince > 0L -> stayText(act, member.staySince, now, short = true)
-                    else -> act.getString(R.string.state_stopped)
-                },
+                meta = memberMetaLine(member, now),
+                trailing = memberTrailing(member),
                 host = hostId.isNotEmpty() && member.id == hostId,
                 // 방장일 때만, 그리고 내 행이 아닌 사람에게만 내보내기 버튼
                 onKick = if (amHost) {
@@ -476,17 +484,25 @@ class RoomScreen(private val host: MainActivity) {
         }
         texts.addView(nameLine)
         texts.addView(
-            Ui.text(act, meta, 11f, act.getColor(R.color.text_secondary)).apply { tag = "meta" },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            // v1.0.10 — 상태 문구가 두 줄까지 늘어나도 오른쪽 상태·내보내기 버튼과 붙지 않도록
+            // 최대 2줄 + 말줄임으로 두고, 오른쪽 요소에는 왼쪽 여백을 넉넉히 준다
+            Ui.text(act, meta, 11f, act.getColor(R.color.text_secondary), maxLines = 2).apply { tag = "meta" },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = act.dp(2f)
             }
         )
         row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT).apply { weight = 1f })
-        row.addView(Ui.text(act, trailing, 10.5f, act.getColor(R.color.text_tertiary), bold = true))
+        row.addView(
+            Ui.text(act, trailing, 10.5f, act.getColor(R.color.text_tertiary), bold = true, maxLines = 1).apply { tag = "trail" },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                leftMargin = act.dp(10f)
+                if (onKick != null) rightMargin = act.dp(2f)
+            }
+        )
         if (onKick != null) {
             row.addView(kickButton(onKick), LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { leftMargin = act.dp(8f) })
+            ).apply { leftMargin = act.dp(10f) })
         }
         return row
     }

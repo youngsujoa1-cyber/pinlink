@@ -20,6 +20,7 @@ import android.view.animation.DecelerateInterpolator
 import com.youngsu.pinlink.core.MeetingPoint
 import com.youngsu.pinlink.core.Member
 import com.youngsu.pinlink.core.PinLogic
+import com.youngsu.pinlink.core.PinColors
 import com.youngsu.pinlink.map.MapStyle
 import com.youngsu.pinlink.map.MapTileProvider
 import kotlin.math.PI
@@ -61,7 +62,7 @@ class MemberMapView @JvmOverloads constructor(
         const val DEFAULT_LNG = 126.9780
 
         private const val TILE_PX = 256.0
-        private const val MY_COLOR = "#4C8DFF"
+        private const val MY_COLOR = "#2563EB"
 
         /** 지도 스타일별 바탕·격자 색 — 타일이 아직 없을 때 이 색이 보인다 */
         private const val DARK_BACKDROP = "#0E1520"
@@ -120,7 +121,7 @@ class MemberMapView @JvmOverloads constructor(
 
     private val pinStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 2.2f * density
+        strokeWidth = 3f * density
         color = Color.WHITE
     }
 
@@ -347,10 +348,10 @@ class MemberMapView @JvmOverloads constructor(
         for (member in members) {
             if (!member.valid) continue
             val (px, py) = screenOf(member.lat, member.lng)
-            val bubbleY = py - 34f * density
+            val bubbleY = py - 38f * density
             val dx = abs(px - x)
             val dy = abs(bubbleY - y)
-            val distance = if (dy < 30f * density && dx < 26f * density) dy else Float.MAX_VALUE
+            val distance = if (dy < 32f * density && dx < 28f * density) dy else Float.MAX_VALUE
             if (distance < bestDistance) {
                 bestDistance = distance
                 best = member
@@ -512,26 +513,25 @@ class MemberMapView @JvmOverloads constructor(
         val (px, py) = screenOf(member.lat, member.lng)
         if (px < -80f || px > width + 80f || py < -80f || py > height + 80f) return
 
-        val bubbleR = 17f * density
-        val bubbleY = py - 34f * density
+        val bubbleR = 19f * density
+        val bubbleY = py - 38f * density
 
+        // v1.0.10 — 오래된 핀도 **투명하게 흐리지 않는다**. 밝은 지도에서 연한 파스텔 + 반투명은
+        // 거의 보이지 않았다. 대신 채도만 낮춰 '멈춘 핀'임을 알린다.
         val stale = PinLogic.isStale(member.updatedAt, now)
-        val alpha = when {
-            !member.sharing -> 90
-            stale -> 150
-            else -> 255
-        }
+        val alpha = 255
 
         // 바닥 그림자
         canvas.drawOval(
-            px - 8f * density, py - 4f * density,
-            px + 8f * density, py + 3f * density,
+            px - 9f * density, py - 4.5f * density,
+            px + 9f * density, py + 3.5f * density,
             shadowPaint
         )
 
-        // 핀 몸통 (원 + 아래 꼭지)
-        val color = runCatching { Color.parseColor(member.color) }.getOrDefault(Color.parseColor(MY_COLOR))
-        pinFill.color = color
+        // 핀 몸통 (원 + 아래 꼭지) — 지도용 선명한 색(PinColors)으로 그린다
+        val color = runCatching { Color.parseColor(PinColors.vivid(member.color)) }
+            .getOrDefault(Color.parseColor(PinColors.DEFAULT))
+        pinFill.color = if (stale) dim(color) else color
         pinFill.alpha = alpha
         canvas.drawCircle(px, bubbleY, bubbleR, pinFill)
         val tail = Path().apply {
@@ -557,13 +557,21 @@ class MemberMapView @JvmOverloads constructor(
 
         // 이름 첫 글자
         initialPaint.alpha = alpha
-        initialPaint.textSize = 15f * density
+        initialPaint.textSize = 17f * density
         val initial = member.name.trim().firstOrNull()?.toString()?.uppercase() ?: "?"
         val textY = bubbleY - (initialPaint.descent() + initialPaint.ascent()) / 2f
         canvas.drawText(initial, px, textY, initialPaint)
 
         // 이름표
         drawLabel(canvas, member.name, px, py + 5f * density, alpha)
+    }
+
+    /** 오래된 색 — 밝기만 0.82배로 낮춰 '멈춘 핀'을 구분한다 (투명도는 쓰지 않는다) */
+    private fun dim(color: Int): Int {
+        val r = (Color.red(color) * 0.82f).toInt()
+        val g = (Color.green(color) * 0.82f).toInt()
+        val b = (Color.blue(color) * 0.82f).toInt()
+        return Color.rgb(r.coerceIn(0, 255), g.coerceIn(0, 255), b.coerceIn(0, 255))
     }
 
     private fun drawMeeting(canvas: Canvas, point: MeetingPoint) {
@@ -606,13 +614,13 @@ class MemberMapView @JvmOverloads constructor(
         val (px, py) = screenOf(lat, lng)
         if (px < -60f || px > width + 60f || py < -60f || py > height + 60f) return
 
-        val halo = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#334CD5FF") }
+        val halo = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#402563EB") }
         val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
         val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor(MY_COLOR) }
 
-        canvas.drawCircle(px, py, 18f * density, halo)
-        canvas.drawCircle(px, py, 9f * density, ring)
-        canvas.drawCircle(px, py, 6.5f * density, dot)
+        canvas.drawCircle(px, py, 19f * density, halo)
+        canvas.drawCircle(px, py, 10f * density, ring)
+        canvas.drawCircle(px, py, 7f * density, dot)
     }
 
     private fun drawPickPin(canvas: Canvas, tipX: Float, tipY: Float) {

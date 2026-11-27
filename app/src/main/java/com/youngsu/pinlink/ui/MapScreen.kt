@@ -185,19 +185,27 @@ class MapScreen(private val host: MainActivity) {
             contentDescription = act.getString(R.string.map_source_badge)
         }
         val chipLine = Ui.row(act).apply {
-            addView(statusPill)
-            addView(codeChip, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { leftMargin = act.dp(7f) })
-            addView(speedPill, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { leftMargin = act.dp(7f) })
-            addView(View(act), LinearLayout.LayoutParams(0, 1).apply { weight = 1f })
-            addView(chatButton, LinearLayout.LayoutParams(act.dp(34f), act.dp(34f)).apply { leftMargin = act.dp(6f) })
+            // v1.0.10 — 왼쪽 칩(공유 중·코드·속도)은 남는 자리를 쓰고, 오른쪽 버튼 3개는
+            // 간격을 8dp 로 맞춰 서로 붙지 않게 한다. 좁은 화면에서도 버튼이 밀려 잘리지 않도록
+            // 왼쪽 묶음을 weight=1 로 두어 먼저 줄어들게 한다.
+            val gap = act.dp(8f)
+            val left = Ui.row(act).apply {
+                addView(statusPill)
+                addView(codeChip, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { leftMargin = act.dp(6f) })
+                addView(speedPill, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { leftMargin = act.dp(6f) })
+            }
+            left.isBaselineAligned = false
+            addView(left, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT).apply { weight = 1f })
+            addView(chatButton, LinearLayout.LayoutParams(act.dp(36f), act.dp(36f)).apply { leftMargin = gap })
             addView(sourceBadge, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { leftMargin = act.dp(8f) })
-            addView(styleButton, LinearLayout.LayoutParams(act.dp(34f), act.dp(34f)).apply { leftMargin = act.dp(6f) })
+            ).apply { leftMargin = gap })
+            addView(styleButton, LinearLayout.LayoutParams(act.dp(36f), act.dp(36f)).apply { leftMargin = gap })
+            isBaselineAligned = false
         }
         topBar.addView(chipLine, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
@@ -288,12 +296,16 @@ class MapScreen(private val host: MainActivity) {
         val spacer = View(act)
         actionsRow.addView(spacer, LinearLayout.LayoutParams(0, 1).apply { weight = 1f })
         val recenter = circleButton(R.drawable.ic_my_location, act.getString(R.string.map_recenter)) {
+            // v1.0.10 — '현위치' 버튼은 지도만 따라가는 데서 그치지 않고 **위치를 실제로 다시 받아 온다**
+            // (새 측정 → 서버 업로드 → 남은 사람 위치 새로 받기). GPS 가 멈춰도 여기서 되살아난다.
+            PinSession.refreshNow()
             map.setFollow(true)
             map.animateTo(
                 PinSession.myFix?.lat ?: HybridMapView.DEFAULT_LAT,
                 PinSession.myFix?.lng ?: HybridMapView.DEFAULT_LNG,
                 HybridMapView.DEFAULT_ZOOM
             )
+            host.toast(act.getString(R.string.toast_location_refresh))
         }
         actionsRow.addView(recenter, LinearLayout.LayoutParams(act.dp(46f), act.dp(46f)))
 
