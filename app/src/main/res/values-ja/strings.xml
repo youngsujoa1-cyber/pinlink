@@ -116,7 +116,8 @@
     <string name="settings_location_denied">許可されていません</string>
     <string name="settings_open_system">システム設定を開く</string>
     <string name="settings_ads">広告</string>
-    <string name="settings_ads_note">PinLink は画面の最下部にバナー広告を、ルームを開いたときに全画面広告を表示します。このビルドはテスト広告ユニットを使用しています。</string>
+    <string name="settings_ads_note">PinLink は画面の最下部にバナー広告を、ルームを開いたときに全画面広告を表示します。</string>
+    <string name="settings_ads_note_test">PinLink は画面の最下部にバナー広告を、ルームを開いたときに全画面広告を表示します。このビルドはテスト広告ユニットを使用しています。</string>
     <string name="settings_about">情報</string>
     <string name="settings_version">バージョン %1$s</string>
     <string name="settings_sync_live">リアルタイム同期：サーバー接続済み</string>

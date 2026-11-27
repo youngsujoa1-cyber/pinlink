@@ -116,7 +116,8 @@
     <string name="settings_location_denied">未允许</string>
     <string name="settings_open_system">打开系统设置</string>
     <string name="settings_ads">广告</string>
-    <string name="settings_ads_note">PinLink 在屏幕最底部显示横幅广告，并在打开房间时显示全屏广告。本版本使用测试广告单元。</string>
+    <string name="settings_ads_note">PinLink 在屏幕最底部显示横幅广告，并在打开房间时显示全屏广告。</string>
+    <string name="settings_ads_note_test">PinLink 在屏幕最底部显示横幅广告，并在打开房间时显示全屏广告。本版本使用测试广告单元。</string>
     <string name="settings_about">关于</string>
     <string name="settings_version">版本 %1$s</string>
     <string name="settings_sync_live">实时同步：已连接服务器</string>

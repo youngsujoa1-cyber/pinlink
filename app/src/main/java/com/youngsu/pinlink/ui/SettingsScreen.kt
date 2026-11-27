@@ -284,7 +284,15 @@ class SettingsScreen(private val host: MainActivity) {
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         )
         about.addView(
-            Ui.text(act, act.getString(R.string.settings_ads_note), 11f, act.getColor(R.color.text_tertiary)).apply {
+            Ui.text(
+                act,
+                act.getString(
+                    if (com.youngsu.pinlink.ads.AdConfig.isTestMode()) R.string.settings_ads_note_test
+                    else R.string.settings_ads_note
+                ),
+                11f,
+                act.getColor(R.color.text_tertiary)
+            ).apply {
                 setPadding(0, act.dp(4f), 0, 0)
             },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)

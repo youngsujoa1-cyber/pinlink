@@ -116,7 +116,8 @@
     <string name="settings_location_denied">No permitido</string>
     <string name="settings_open_system">Abrir ajustes del sistema</string>
     <string name="settings_ads">Anuncios</string>
-    <string name="settings_ads_note">PinLink muestra un banner al final de la pantalla y un anuncio a pantalla completa al abrir una sala. Esta versión usa unidades de anuncio de prueba.</string>
+    <string name="settings_ads_note">PinLink muestra un banner al final de la pantalla y un anuncio a pantalla completa al abrir una sala.</string>
+    <string name="settings_ads_note_test">PinLink muestra un banner al final de la pantalla y un anuncio a pantalla completa al abrir una sala. Esta versión usa unidades de anuncio de prueba.</string>
     <string name="settings_about">Acerca de</string>
     <string name="settings_version">Versión %1$s</string>
     <string name="settings_sync_live">Sincronización: servidor conectado</string>

@@ -125,7 +125,8 @@
     <string name="settings_location_denied">Not allowed</string>
     <string name="settings_open_system">Open system settings</string>
     <string name="settings_ads">Ads</string>
-    <string name="settings_ads_note">PinLink shows a banner at the bottom of the screen and a full-screen ad when a room is opened. Test ad units are used in this build.</string>
+    <string name="settings_ads_note">PinLink shows a banner at the bottom of the screen and a full-screen ad when a room is opened.</string>
+    <string name="settings_ads_note_test">PinLink shows a banner at the bottom of the screen and a full-screen ad when a room is opened. Test ad units are used in this build.</string>
     <string name="settings_about">About</string>
     <string name="settings_version">Version %1$s</string>
     <string name="settings_sync_live">Live sync: connected server</string>
